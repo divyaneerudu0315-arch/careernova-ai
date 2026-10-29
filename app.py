@@ -1,1702 +1,2332 @@
-import inspect
-import re
-from typing import Any
+
 import streamlit as st
 import pymupdf
-from modules.chatbot import get_career_response
 
+from modules.chatbot import get_career_response
 from modules.learning_roadmap import generate_learning_roadmap
 
 from modules.recommender import (
-
     load_careers,
-
     split_items,
-
     calculate_recommendations,
-
     calculate_career_readiness,
-
 )
 
-from modules.database import initialize_database, save_profile
+from modules.database import (
+    initialize_database,
+    save_profile,
+)
 
-from modules.resume_analyzer import extract_skills, analyze_skill_gap
-
-
+from modules.resume_analyzer import (
+    extract_skills,
+    analyze_skill_gap,
+)
 
 
 
 # --------------------------------------------------
-
-# 1. Page configuration and initialization
-
+# 1. Page Configuration
 # --------------------------------------------------
 
 st.set_page_config(
-
-    page_title="CareerCompass AI",
-
+    page_title="CareerNova AI",
     page_icon="🎯",
-
     layout="wide",
-
     initial_sidebar_state="expanded",
-
 )
-
-
 
 initialize_database()
 
-
-
-for key, default in {
-
-    "career_results": [],
-
-    "chat_history": [],
-
-    "resume_analysis": None,
-
-    "resume_analysis_career": None,
-
-    "resume_file_name": None,
-
-    "student_name": "",
-
-    "student_skills": [],
-
-    "student_interests": [],
-
-    "student_education": "",
-
-    "profile_id": None,
-
-}.items():
-
-    if key not in st.session_state:
-
-        st.session_state[key] = default
-
-
-
-
-
 # --------------------------------------------------
-
-# 2. Styling
-
+# 2. Premium Dark UI Styling
 # --------------------------------------------------
 
 st.markdown(
-
     """
-
     <style>
-
     :root {
-
         --cc-bg: #080D1A;
-
         --cc-panel: #111A2E;
-
-        --cc-panel-soft: #17223A;
-
-        --cc-text: #F3F5FA;
-
-        --cc-muted: #AAB4C8;
-
-        --cc-border: rgba(166, 182, 214, .18);
-
+        --cc-border: #2B3856;
         --cc-purple: #8B5CF6;
-
-        --cc-cyan: #38BDF8;
-
-        --cc-green: #34D399;
-
+        --cc-text: #F1F5F9;
+        --cc-muted: #A7B4CC;
     }
-
-    .stApp { background: var(--cc-bg); color: var(--cc-text); }
-
-    [data-testid="stHeader"] { background: rgba(8,13,26,.94); }
-
-    [data-testid="stSidebar"] { background: #0B1222; border-right: 1px solid var(--cc-border); }
-
-    [data-testid="stSidebar"] > div { padding-top: 1.2rem; }
-
-    .block-container { max-width: 1440px; padding-top: 1.8rem; padding-bottom: 2rem; }
-
-    h1, h2, h3, h4, p, label { color: var(--cc-text); }
-
-    .cc-brand { font-size: 1.2rem; font-weight: 850; letter-spacing: -.02em; }
-
-    .cc-sidebar-sub { color: var(--cc-muted); font-size: .82rem; line-height: 1.5; margin: .35rem 0 1rem; }
-
-    .cc-topbar { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:1.25rem 1.4rem; border:1px solid var(--cc-border); border-radius:20px; background:linear-gradient(120deg,rgba(139,92,246,.17),rgba(56,189,248,.07)); margin-bottom:1rem; }
-
-    .cc-title { font-size:2rem; line-height:1.15; font-weight:900; letter-spacing:-.04em; margin:0; }
-
-    .cc-subtitle { color:var(--cc-muted); margin-top:.45rem; font-size:.96rem; }
-
-    .cc-eyebrow { color:#C4B5FD; font-size:.72rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
-
-    .cc-hero { padding:1.35rem 1.5rem; border-radius:18px; background:var(--cc-panel); border:1px solid var(--cc-border); margin:1rem 0 1.4rem; }
-
-    .cc-hero-title { font-size:1.2rem; font-weight:800; margin-bottom:.35rem; }
-
-    .cc-muted { color:var(--cc-muted); line-height:1.65; }
-
-    .cc-card { background:var(--cc-panel); border:1px solid var(--cc-border); padding:1rem 1.1rem; border-radius:16px; margin:.35rem 0 .7rem; }
-
-    .cc-card-title { font-size:1.08rem; font-weight:800; margin-bottom:.25rem; }
-
-    .cc-pill { display:inline-block; padding:.25rem .6rem; margin:.15rem .2rem .15rem 0; border-radius:999px; background:rgba(139,92,246,.16); border:1px solid rgba(139,92,246,.30); color:#DDD6FE; font-size:.78rem; }
-
-    .cc-footer { text-align:center; color:var(--cc-muted); padding:1.5rem 0 .5rem; font-size:.82rem; }
-
-    .score-ring-wrap { display:flex; justify-content:center; align-items:center; padding:.4rem 0 .5rem; }
-
-    .score-label { color:var(--cc-muted); text-align:center; font-size:.68rem; letter-spacing:.14em; font-weight:800; }
-
-    [data-testid="stMetric"] { background:var(--cc-panel); border:1px solid var(--cc-border); padding:1rem; border-radius:14px; }
-
-    [data-testid="stMetricLabel"] { color:var(--cc-muted) !important; }
-
-    [data-testid="stMetricValue"] { color:var(--cc-text) !important; }
-
-    [data-baseweb="input"] > div, [data-baseweb="textarea"] > div,
-
-    [data-baseweb="select"] > div { background:#111A2E !important; border-color:#34415D !important; color:#F3F5FA !important; border-radius:10px !important; }
-
-    input, textarea { color:#F3F5FA !important; -webkit-text-fill-color:#F3F5FA !important; }
-
-    [data-baseweb="select"] * { color:#F3F5FA !important; }
-
-    /* Premium dark resume uploader */
+    .stApp {
+        background:
+            radial-gradient(ellipse at 15% 0%, rgba(91,58,165,.20), transparent 35%),
+            radial-gradient(ellipse at 90% 8%, rgba(56,189,248,.10), transparent 30%),
+            var(--cc-bg);
+        color: var(--cc-text);
+    }
+    .block-container { max-width:1360px; padding-top:1.15rem; padding-bottom:2rem; }
+    [data-testid="stHeader"] { background:rgba(8,13,26,.75); }
+    [data-testid="stSidebar"], [data-testid="stSidebar"] > div:first-child {
+        background:#090F1E; border-right:1px solid var(--cc-border);
+    }
+    [data-testid="stSidebar"] * { color:var(--cc-text); }
+    h1,h2,h3,h4 { color:#F8FAFC !important; letter-spacing:-.025em; }
+    p,label,[data-testid="stCaptionContainer"] { color:var(--cc-muted); }
+    .main-title {
+        font-size:clamp(2.2rem,5vw,3.5rem); line-height:1.12; font-weight:850;
+        text-align:center; letter-spacing:-.045em;
+        background:linear-gradient(95deg,#C4B5FD 8%,#A78BFA 45%,#67E8F9 95%);
+        -webkit-background-clip:text; background-clip:text;
+        -webkit-text-fill-color:transparent; margin:.2rem 0 .65rem 0;
+    }
+    .subtitle {
+        max-width:760px; margin:0 auto 1.5rem auto; text-align:center;
+        font-size:1.05rem; line-height:1.8; color:#A7B4CC;
+    }
+    .hero-panel {
+        padding:1.35rem 1.5rem; border:1px solid #354365; border-radius:20px;
+        background:linear-gradient(120deg,rgba(139,92,246,.13),rgba(56,189,248,.06));
+        margin:.5rem 0 1.25rem 0;
+    }
+    .hero-kicker {
+        color:#C4B5FD; font-size:.78rem; font-weight:800;
+        letter-spacing:.13em; text-transform:uppercase; margin-bottom:.4rem;
+    }
+    .hero-copy { color:#D7E1F2; font-size:1rem; line-height:1.7; margin:0; }
+    .career-card {
+        padding:18px; border-radius:16px; border:1px solid var(--cc-border);
+        background:var(--cc-panel); margin-bottom:12px;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        border-color:var(--cc-border); border-radius:18px;
+        background:rgba(17,26,46,.78);
+    }
+    [data-testid="stMetric"] {
+        background:linear-gradient(145deg,#151F35,#10182A);
+        border:1px solid #2D3A59; border-radius:14px; padding:10px 13px;
+    }
+    [data-testid="stMetricLabel"] { color:#A5B4FC !important; }
+    [data-testid="stMetricValue"] { color:#F8FAFC !important; font-weight:800; }
+    .stTextInput input,.stTextArea textarea {
+        background:#111B30 !important; color:#F8FAFC !important;
+        border:1px solid #354363 !important; border-radius:11px !important;
+    }
+    [data-baseweb="select"] > div {
+        background:#111B30 !important; border-color:#354363 !important;
+        color:#F8FAFC !important; border-radius:11px !important;
+    }
     [data-testid="stFileUploader"] {
-        background: #111A2E !important;
-        border: 1px dashed #536581 !important;
-        border-radius: 14px !important;
-        padding: 12px !important;
+        background:rgba(17,26,46,.8) !important;
+        border:1px dashed #8B5CF6 !important;
+        border-radius:16px; padding:14px;
+        color:#F1F5F9 !important;
     }
-
-    [data-testid="stFileUploaderDropzone"] {
-        background: #111A2E !important;
-        border: 1px dashed #475569 !important;
-        border-radius: 10px !important;
-    }
-
+    /* Keep the PDF uploader drop zone dark instead of Streamlit's white default. */
+    [data-testid="stFileUploaderDropzone"],
     [data-testid="stFileUploaderDropzone"] > div {
-        background: transparent !important;
+        background:#111B30 !important;
+        color:#F1F5F9 !important;
+        border-color:#354363 !important;
     }
-
     [data-testid="stFileUploaderDropzone"] button {
-        background: #1B2740 !important;
-        color: #F3F5FA !important;
-        border: 1px solid #536581 !important;
-        border-radius: 8px !important;
+        background:#263451 !important;
+        color:#F8FAFC !important;
+        border:1px solid #5966A2 !important;
     }
-
-    [data-testid="stFileUploaderDropzone"] button:hover {
-        background: #253454 !important;
-        border-color: #8B5CF6 !important;
-        color: #FFFFFF !important;
+    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploader"] span,
+    [data-testid="stFileUploader"] label {
+        color:#D7E1F2 !important;
     }
-
-    [data-testid="stFileUploaderDropzone"] small,
-    [data-testid="stFileUploaderDropzone"] span {
-        color: #AAB4C8 !important;
+    .stButton > button,.stFormSubmitButton > button {
+        color:white !important; background:linear-gradient(100deg,#7C3AED,#6366F1) !important;
+        border:1px solid rgba(196,181,253,.25) !important; border-radius:11px !important;
+        min-height:2.7rem; font-weight:750 !important;
+        transition:transform .15s ease,filter .15s ease;
     }
-
-    [data-testid="stFileUploaderDropzone"] svg {
-        color: #A78BFA !important;
+    .stButton > button:hover,.stFormSubmitButton > button:hover {
+        filter:brightness(1.12); transform:translateY(-1px); border-color:#A78BFA !important;
     }
-
-    .stButton > button, .stFormSubmitButton > button { color:white !important; background:linear-gradient(100deg,#7C3AED,#2563EB) !important; border:0 !important; border-radius:10px !important; min-height:2.65rem; font-weight:750 !important; }
-
-    .stButton > button:hover, .stFormSubmitButton > button:hover { filter:brightness(1.1); }
-
-
-
-/* Premium dark AI chat input and fixed bottom area */
-
-
-
-/* CareerCompass AI - consistent dark chat footer */
-
-
-
-[data-testid="stBottom"],
-
-[data-testid="stBottom"] *,
-
-[data-testid="stBottomBlockContainer"],
-
-[data-testid="stChatInput"],
-
-[data-testid="stChatInput"] form {
-
-    background-color: #080D1A !important;
-
-    box-shadow: none !important;
-
-}
-
-
-
-/* Dark chat input container */
-
-[data-testid="stChatInput"] > div,
-
-[data-testid="stChatInput"] form > div {
-
-    background: #111A2E !important;
-
-    border: 1px solid #34415D !important;
-
-    border-radius: 14px !important;
-
-}
-
-
-
-/* Chat text */
-
-[data-testid="stChatInput"] textarea {
-
-    background: transparent !important;
-
-    color: #F3F5FA !important;
-
-    -webkit-text-fill-color: #F3F5FA !important;
-
-    caret-color: #A78BFA !important;
-
-    border: none !important;
-
-    box-shadow: none !important;
-
-    opacity: 1 !important;
-
-}
-
-
-
-/* Placeholder */
-
-[data-testid="stChatInput"] textarea::placeholder {
-
-    color: #AAB4C8 !important;
-
-    -webkit-text-fill-color: #AAB4C8 !important;
-
-    opacity: 1 !important;
-
-}
-
-
-
-/* Send button */
-
-[data-testid="stChatInput"] button {
-
-    background: linear-gradient(100deg, #7C3AED, #2563EB) !important;
-
-    color: #FFFFFF !important;
-
-    border: none !important;
-
-    border-radius: 10px !important;
-
-}
-
-
-
-    [data-testid="stChatMessage"] { background:var(--cc-panel); border:1px solid var(--cc-border); border-radius:14px; padding:.8rem 1rem; margin-bottom:.6rem; }
-
-    [data-testid="stExpander"] { background:var(--cc-panel); border:1px solid var(--cc-border); border-radius:13px; }
-
-    [data-testid="stAlert"] { border-radius:12px; }
-
-    [data-testid="stProgressBar"] > div { background:#25314A; border-radius:999px; }
-
-    [data-testid="stProgressBar"] > div > div { background:linear-gradient(90deg,#8B5CF6,#38BDF8); border-radius:999px; }
-
-    hr { border-color:var(--cc-border) !important; }
-
-    a { color:#A5B4FC; }
-
-    @media(max-width:768px) { .block-container { padding:1rem .8rem 2rem; } .cc-topbar { align-items:flex-start; flex-direction:column; } .cc-title { font-size:1.65rem; } }
-
-
-    /* FINAL FIX: keep profile text input and education dropdown dark and readable */
-    [data-testid="stTextInput"] [data-baseweb="input"],
-    [data-testid="stTextInput"] [data-baseweb="input"] > div,
-    [data-testid="stTextInput"] input,
-    [data-testid="stSelectbox"] [data-baseweb="select"],
-    [data-testid="stSelectbox"] [data-baseweb="select"] > div,
-    [data-testid="stSelectbox"] [role="combobox"] {
-        background-color: #111A2E !important;
-        color: #F3F5FA !important;
-        border-color: #536581 !important;
-        opacity: 1 !important;
-        box-shadow: none !important;
+    [data-testid="stProgressBar"] > div { background:#27334D; border-radius:999px; }
+    [data-testid="stProgressBar"] > div > div {
+        background:linear-gradient(90deg,#8B5CF6,#38BDF8); border-radius:999px;
     }
-
-    [data-testid="stTextInput"] input {
-        -webkit-text-fill-color: #F3F5FA !important;
-        caret-color: #A78BFA !important;
+    [data-testid="stChatMessage"] {
+        background:rgba(17,26,46,.88); border:1px solid #2B3856;
+        border-radius:15px; padding:12px 14px; margin-bottom:10px;
     }
-
-    [data-testid="stTextInput"] input::placeholder {
-        color: #AAB4C8 !important;
-        -webkit-text-fill-color: #AAB4C8 !important;
-        opacity: 1 !important;
+    /* Style the entire fixed chat-input area, not just the text field. */
+    [data-testid="stBottom"],
+    [data-testid="stBottomBlockContainer"] {
+        background:rgba(8,13,26,.97) !important;
+        background-color:rgba(8,13,26,.97) !important;
     }
-
-    [data-testid="stSelectbox"] [data-baseweb="select"] span,
-    [data-testid="stSelectbox"] [data-baseweb="select"] div,
-    [data-testid="stSelectbox"] [data-baseweb="select"] input {
-        color: #F3F5FA !important;
-        -webkit-text-fill-color: #F3F5FA !important;
+    [data-testid="stChatInput"],
+    [data-testid="stChatInput"] > div,
+    [data-testid="stChatInput"] [data-baseweb="textarea"],
+    [data-testid="stChatInput"] [data-baseweb="textarea"] > div {
+        background:#111B30 !important;
+        background-color:#111B30 !important;
+        border-color:#5966A2 !important;
+        border-radius:12px !important;
+        box-shadow:none !important;
     }
-
-    [data-testid="stSelectbox"] label,
-    [data-testid="stTextInput"] label {
-        color: #F3F5FA !important;
+    [data-testid="stChatInput"] textarea {
+        background:transparent !important;
+        background-color:transparent !important;
+        color:#F8FAFC !important;
+        -webkit-text-fill-color:#F8FAFC !important;
+        caret-color:#C4B5FD !important;
+        border:0 !important;
     }
-
-    [data-baseweb="popover"], [data-baseweb="menu"],
-    [role="listbox"], [role="option"] {
-        background-color: #111A2E !important;
-        color: #F3F5FA !important;
+    [data-testid="stChatInput"] textarea::placeholder {
+        color:#A7B4CC !important;
+        -webkit-text-fill-color:#A7B4CC !important;
+        opacity:1 !important;
+    }
+    [data-testid="stChatInput"] button {
+        background:#263451 !important;
+        color:#F8FAFC !important;
+        border-color:#354363 !important;
+    }
+    [data-testid="stExpander"] {
+        background:rgba(17,26,46,.8); border:1px solid var(--cc-border); border-radius:13px;
+    }
+    [data-testid="stAlert"] { border-radius:13px; }
+    hr { border-color:#293550 !important; }
+    .sidebar-brand { font-size:1.2rem; font-weight:850; letter-spacing:-.03em; color:#C4B5FD; padding:.4rem 0 .1rem; }
+    .sidebar-caption { color:#8291AE; font-size:.82rem; line-height:1.5; margin-bottom:1rem; }
+    [data-testid="stVerticalBlock"] { gap: .8rem; }
+    .footer { text-align:center; color:#71809D; padding:24px 0 8px; font-size:.82rem; }
+    @media(max-width:768px) {
+        .block-container { padding:1rem 1rem 2rem; }
+        .subtitle { font-size:.95rem; }
+        .hero-panel { padding:1rem; }
     }
     
-/* Make AI mentor responses readable in dark mode */
-[data-testid="stChatMessage"] {
-    background-color: #111A2E !important;
-    color: #F3F5FA !important;
-    border: 1px solid #34415D !important;
+/* Improve readability of tables and roadmap content */
+.stApp [data-testid="stMarkdownContainer"] table {
+    color: #E5E7EB !important;
+    background-color: #111827 !important;
+    border-collapse: collapse !important;
 }
 
-[data-testid="stChatMessage"] p,
-[data-testid="stChatMessage"] li,
-[data-testid="stChatMessage"] h1,
-[data-testid="stChatMessage"] h2,
-[data-testid="stChatMessage"] h3,
-[data-testid="stChatMessage"] h4,
-[data-testid="stChatMessage"] strong,
-[data-testid="stChatMessage"] em,
-[data-testid="stChatMessage"] span,
-[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] * {
-    color: #F3F5FA !important;
-    -webkit-text-fill-color: #F3F5FA !important;
-    opacity: 1 !important;
+.stApp [data-testid="stMarkdownContainer"] th {
+    background-color: #263449 !important;
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
 }
 
-[data-testid="stChatMessage"] a {
-    color: #93C5FD !important;
-    -webkit-text-fill-color: #93C5FD !important;
+.stApp [data-testid="stMarkdownContainer"] td {
+    background-color: #111827 !important;
+    color: #E5E7EB !important;
+    border-color: #374151 !important;
 }
 
+.stApp [data-testid="stMarkdownContainer"] p,
+.stApp [data-testid="stMarkdownContainer"] li {
+    color: #D1D5DB;
+}
+
+.stApp [data-testid="stMarkdownContainer"] strong {
+    color: #FFFFFF !important;
+}
 
     </style>
-
     """,
-
     unsafe_allow_html=True,
-
 )
-
-
-
-def render_score_ring(score, label="CAREER READINESS"):
-    """Display a circular percentage indicator."""
-    import math
-    import html
-
-    try:
-        score = float(score)
-        if not math.isfinite(score):
-            score = 0
-        score = max(0, min(100, score))
-    except (TypeError, ValueError, OverflowError):
-        score = 0
-
-    percent = int(round(score))
-    circumference = 2 * math.pi * 43
-    offset = circumference * (1 - score / 100)
-    safe_label = html.escape(str(label))
-
-    st.markdown(
-        f"""
-        <div style="
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            padding:12px 6px 18px;
-            text-align:center;
-        ">
-          <svg width="132" height="132" viewBox="0 0 120 120"
-               role="img" aria-label="{safe_label}: {percent}%">
-            <circle cx="60" cy="60" r="43"
-                    fill="none"
-                    stroke="#29344A"
-                    stroke-width="10"/>
-            <circle cx="60" cy="60" r="43"
-                    fill="none"
-                    stroke="#38BDF8"
-                    stroke-width="10"
-                    stroke-linecap="round"
-                    stroke-dasharray="{circumference:.2f}"
-                    stroke-dashoffset="{offset:.2f}"
-                    transform="rotate(-90 60 60)"/>
-            <text x="60" y="67"
-                  text-anchor="middle"
-                  fill="#F3F5FA"
-                  font-size="25"
-                  font-weight="700">{percent}%</text>
-          </svg>
-          <div style="
-              color:#AAB4C8;
-              font-size:12px;
-              font-weight:700;
-              letter-spacing:0.8px;
-              margin-top:4px;
-          ">{safe_label}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def safe_split(value: Any) -> list[str]:
-
-    """Use the project's split_items helper with a safe fallback."""
-
-    if value is None:
-
-        return []
-
-    try:
-
-        items = split_items(value)
-
-    except Exception:
-
-        items = re.split(r"[,;|\n]", str(value))
-
-    if isinstance(items, str):
-
-        items = [items]
-
-    return [str(item).strip() for item in items if str(item).strip()]
-
-
-
-
-
-def normalized_set(items: Any) -> set[str]:
-
-    """Return normalized skill strings from common helper output shapes."""
-
-    if items is None:
-
-        return set()
-
-    if isinstance(items, dict):
-
-        for key in ("skills", "extracted_skills", "resume_skills", "items", "results"):
-
-            if key in items:
-
-                return normalized_set(items[key])
-
-        items = list(items.keys())
-
-    if isinstance(items, str):
-
-        items = safe_split(items)
-
-    try:
-
-        return {str(item).strip().lower() for item in items if str(item).strip()}
-
-    except TypeError:
-
-        return {str(items).strip().lower()} if str(items).strip() else set()
-
-
-
-
-
-def get_required_skills(careers_df, career_name: str) -> list[str]:
-
-    """Find the required skills for a career row in the supplied dataset."""
-
-    if "career" not in careers_df.columns or "skills" not in careers_df.columns:
-
-        return []
-
-    rows = careers_df[careers_df["career"].astype(str).str.casefold() == str(career_name).casefold()]
-
-    if rows.empty:
-
-        return []
-
-    return safe_split(rows.iloc[0]["skills"])
-
-
-
-
-
-def get_readiness(skills: list[str], career_name: str) -> dict | None:
-
-    try:
-
-        result = calculate_career_readiness(skills, career_name)
-
-        return result if isinstance(result, dict) else None
-
-    except Exception:
-
-        return None
-
-
-
-
-
-def call_roadmap(missing_skills: list[str], career_name: str):
-
-    """Call the existing roadmap helper while accommodating common signatures."""
-
-    try:
-
-        sig = inspect.signature(generate_learning_roadmap)
-
-        params = list(sig.parameters.values())
-
-        values = {}
-
-        for p in params:
-
-            if p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
-
-                continue
-
-            name = p.name.lower()
-
-            if any(word in name for word in ("career", "role", "job", "path")):
-
-                values[p.name] = career_name
-
-            elif any(word in name for word in ("missing", "gap", "skill", "topic")):
-
-                values[p.name] = missing_skills
-
-        required = [p for p in params if p.default is inspect.Parameter.empty and p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)]
-
-        if all(p.name in values for p in required):
-
-            return generate_learning_roadmap(**values)
-
-    except (TypeError, ValueError):
-
-        pass
-
-    for args in ((missing_skills,), (career_name, missing_skills), (missing_skills, career_name)):
-
-        try:
-
-            return generate_learning_roadmap(*args)
-
-        except TypeError:
-
-            continue
-
-    return []
-
-
-
-
-
-def normalize_roadmap(roadmap: Any, fallback_skills: list[str]) -> list[dict]:
-
-    if isinstance(roadmap, dict):
-
-        for key in ("roadmap", "steps", "learning_roadmap", "plan"):
-
-            if key in roadmap:
-
-                roadmap = roadmap[key]
-
-                break
-
-    if isinstance(roadmap, str):
-
-        return [{"skill": s, "duration": "Practice regularly", "topics": roadmap, "resource": ""} for s in fallback_skills[:8]]
-
-    items = []
-
-    try:
-
-        for index, step in enumerate(roadmap):
-
-            if isinstance(step, dict):
-
-                items.append({
-
-                    "skill": str(step.get("skill", step.get("title", step.get("topic", fallback_skills[index] if index < len(fallback_skills) else f"Learning step {index + 1}")))),
-
-                    "duration": str(step.get("duration", step.get("time", "Not specified"))),
-
-                    "topics": str(step.get("topics", step.get("description", step.get("details", "Practice this skill with small exercises.")))),
-
-                    "resource": str(step.get("resource", step.get("url", step.get("link", ""))) or ""),
-
-                })
-
-            else:
-
-                items.append({"skill": str(step), "duration": "Practice regularly", "topics": "Learn the fundamentals and complete a small practical exercise.", "resource": ""})
-
-    except TypeError:
-
-        pass
-
-    if not items:
-
-        items = [{"skill": s, "duration": "Practice regularly", "topics": "Learn the fundamentals and complete a small practical exercise.", "resource": ""} for s in fallback_skills[:8]]
-
-    return items
-
-
-
-
-
-def normalize_gap_result(raw_gap: Any, detected_skills: set[str], required_skills: list[str]) -> dict:
-
-    """Normalize the project's analyzer output into a consistent structure."""
-
-    required_map = {s.lower(): s for s in required_skills}
-
-    matched = [required_map[s] for s in required_map if s in detected_skills]
-
-    missing = [s for s in required_skills if s.lower() not in detected_skills]
-
-    if isinstance(raw_gap, dict):
-
-        raw_matched = raw_gap.get("matched_skills", raw_gap.get("matching_skills", raw_gap.get("matched", None)))
-
-        raw_missing = raw_gap.get("missing_skills", raw_gap.get("skills_to_learn", raw_gap.get("missing", None)))
-
-        if raw_matched is not None:
-
-            candidates = normalized_set(raw_matched)
-
-            matched = [s for s in required_skills if s.lower() in candidates]
-
-        if raw_missing is not None:
-
-            candidates = normalized_set(raw_missing)
-
-            missing = [s for s in required_skills if s.lower() in candidates]
-
-    percentage = round((len(matched) / len(required_skills)) * 100) if required_skills else 0
-
-    return {"matched_skills": matched, "missing_skills": missing, "match_percentage": percentage}
-
-
-
-
-
+# --------------------------------------------------
+# CareerNova AI — Welcome Screen
 # --------------------------------------------------
 
-# 3. Sidebar and page header
-
-# --------------------------------------------------
-
-with st.sidebar:
-
-    st.markdown('<div class="cc-brand">✦ CareerCompass AI</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="cc-sidebar-sub">Your personal AI-powered career guide</div>', unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    st.markdown("**QUICK NAVIGATION**")
-
+if (
+    not st.session_state.get("welcome_started", False)
+    and not st.session_state.get("student_name")
+):
     st.markdown(
-
         """
-
-        <div style="line-height:2.2">
-
-          <a href="#student-profile" style="text-decoration:none">👤 Student Profile</a><br>
-
-          <a href="#career-recommendations" style="text-decoration:none">🎯 Career Matches</a><br>
-
-          <a href="#resume-analyzer" style="text-decoration:none">📄 Resume Analyzer</a><br>
-
-          <a href="#learning-roadmap" style="text-decoration:none">🗺️ Learning Roadmap</a><br>
-
-          <a href="#career-chatbot" style="text-decoration:none">🤖 AI Career Mentor</a>
-
+        <div class="hero-panel" style="text-align:center;padding:3rem 2rem;">
+            <div class="hero-kicker">YOUR FUTURE STARTS HERE</div>
+            <h1 class="main-title">
+                Welcome to CareerNova AI
+            </h1>
+            <p class="hero-copy" style="max-width:750px;margin:1rem auto;">
+                Discover careers that fit your interests, identify skill gaps,
+                build personalized learning roadmaps, and prepare for your
+                next career opportunity with AI.
+            </p>
         </div>
-
         """,
-
         unsafe_allow_html=True,
-
     )
 
-    st.markdown("---")
+    st.markdown(
+        "<h2 style='text-align:center;'>Explore Your Career Journey</h2>",
+        unsafe_allow_html=True,
+    )
 
-    st.caption("Build skills. Explore possibilities. Move forward.")
+    feature_cols = st.columns(3)
 
+    with feature_cols[0]:
+        with st.container(border=True):
+            st.markdown("### 🎯 Career Intelligence")
+            st.write(
+                "Discover career paths matched to your skills, "
+                "education, and interests."
+            )
 
+    with feature_cols[1]:
+        with st.container(border=True):
+            st.markdown("### 📚 Adaptive Skill Growth")
+            st.write(
+                "Identify missing skills and create a personalized "
+                "learning roadmap."
+            )
 
-st.markdown(
-    """<div class="cc-topbar"><div><div class="cc-eyebrow">Personalized career discovery</div><div class="cc-title">CareerCompass AI 🎯</div><div class="cc-subtitle">Discover your direction. Develop your potential.</div></div><div style="text-align:right;color:#AAB4C8;font-size:.78rem;letter-spacing:.1em;font-weight:700">AI SKILL ANALYZER<br>CAREER READINESS</div></div><div class="cc-hero"><div class="cc-hero-title">Your future, with direction</div><div class="cc-muted">Get career recommendations based on your skills, interests, and education. Explore your readiness, identify missing skills, analyze your resume, build a learning roadmap, and ask your personal AI career mentor for guidance.</div></div>""",
-    unsafe_allow_html=True,
-)
+    with feature_cols[2]:
+        with st.container(border=True):
+            st.markdown("### 🚀 Job Readiness")
+            st.write(
+                "Evaluate your career readiness and prepare "
+                "for interviews."
+            )
 
+    st.write("")
 
+    _, center_col, _ = st.columns([1, 2, 1])
 
+    with center_col:
+        if st.button(
+            "✨ Get Started",
+            key="welcome_get_started",
+            type="primary",
+            use_container_width=True,
+        ):
+            st.session_state["welcome_started"] = True
+            st.session_state["active_page"] = "profile"
+            st.rerun()
 
-
-# --------------------------------------------------
-
-# 4. Load career dataset
-
-# --------------------------------------------------
-
-try:
-
-    careers_df = load_careers()
-
-    if careers_df is None or getattr(careers_df, "empty", True):
-
-        st.error("The career dataset is empty. Please check the careers CSV file.")
-
-        st.stop()
-
-    required_columns = {"career", "skills", "interests", "education"}
-
-    missing_columns = required_columns - set(careers_df.columns)
-
-    if missing_columns:
-
-        st.error("The career dataset is missing columns: " + ", ".join(sorted(missing_columns)))
-
-        st.stop()
-
-except Exception as error:
-
-    st.error(f"Could not load the career dataset: {error}")
+    st.markdown(
+        "<p style='text-align:center;color:#A7B4CC;'>"
+        "Career guidance powered by AI. Recommendations are guidance, "
+        "not guarantees of employment."
+        "</p>",
+        unsafe_allow_html=True,
+    )
 
     st.stop()
 
 
 
-all_skills = sorted({item for value in careers_df["skills"] for item in safe_split(value)}, key=str.casefold)
+# --------------------------------------------------
+# CareerNova AI — Sidebar Navigation
+# --------------------------------------------------
 
-all_interests = sorted({item for value in careers_df["interests"] for item in safe_split(value)}, key=str.casefold)
+if (
+    st.session_state.get("welcome_started", False)
+    or st.session_state.get("student_name")
+):
 
-education_options = ["btech", "bsc", "bca", "mtech", "msc", "bba", "bcom"]
+    with st.sidebar:
 
-if "education" in careers_df.columns:
+        st.markdown(
+            '<div class="sidebar-brand">✦ CareerNova AI</div>',
+            unsafe_allow_html=True,
+        )
 
-    for value in careers_df["education"].dropna().astype(str).tolist():
+        st.markdown(
+            '<div class="sidebar-caption">'
+            'Your personal AI-powered career guide'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-        for item in safe_split(value):
+        st.markdown("---")
+        st.markdown("#### QUICK NAVIGATION")
 
-            normalized = item.strip().lower()
+        navigation_items = [
+            ("▦ Dashboard", "career-dashboard"),
+            ("👤 My Profile", "student-profile"),
+            ("🧠 Career Intelligence", "career-intelligence"),
+            ("🎯 Career Matches", "career-recommendations"),
+            ("🧩 Skill Gap Analysis", "skill-gap-analysis"),
+            ("📈 Adaptive Skill Growth", "adaptive-skill-growth"),
+            ("🧪 Job Readiness & Simulation", "job-readiness-simulation"),
+            ("📄 Resume Analysis", "resume-analyzer"),
+            ("🗺️ Learning Roadmap", "learning-roadmap"),
+            ("🤖 Career Coach", "career-chatbot"),
+        ]
 
-            if normalized and normalized not in education_options:
+        for label, section_id in navigation_items:
+            st.markdown(
+                f'<a href="#{section_id}" '
+                'style="display:block; padding:9px 10px; '
+                'margin:3px 0; border-radius:9px; '
+                'background:rgba(139,92,246,0.08); '
+                'color:#C4B5FD; text-decoration:none; '
+                'font-size:0.92rem;">'
+                f'{label}</a>',
+                unsafe_allow_html=True,
+            )
 
-                education_options.append(normalized)
+        st.markdown("---")
 
-
-
+        st.caption(
+            "Build skills. Explore possibilities. Move forward."
+        )
 
 
 # --------------------------------------------------
-
-# 5. Student profile form
-
+# 4. Load Career Dataset
 # --------------------------------------------------
 
-st.markdown('<div id="student-profile"></div>', unsafe_allow_html=True)
+try:
+    careers_df = load_careers()
 
-st.header("👤 Build Your Student Profile")
-
-st.caption("Tell us about your current skills and interests so we can suggest career paths to explore.")
-
-with st.form("career_profile_form", clear_on_submit=False):
-
-    name = st.text_input("Your name", value=st.session_state.get("student_name", ""), placeholder="Enter your name")
-
-    current_education = st.session_state.get("student_education", "btech")
-
-    if current_education not in education_options:
-
-        current_education = "btech" if "btech" in education_options else education_options[0]
-
-    education = st.selectbox(
-
-        "Education",
-
-        options=education_options,
-
-        index=education_options.index(current_education),
-
-        format_func=lambda value: value.upper(),
-
-    )
-
-    default_skills = [s for s in st.session_state.get("student_skills", []) if s in all_skills]
-
-    default_interests = [i for i in st.session_state.get("student_interests", []) if i in all_interests]
-
-    skills = st.multiselect("Skills you currently have", options=all_skills, default=default_skills, placeholder="Choose your skills")
-
-    interests = st.multiselect("Areas that interest you", options=all_interests, default=default_interests, placeholder="Choose your interests")
-
-    submitted = st.form_submit_button("✨ Find My Career Matches", use_container_width=True)
+except Exception as error:
+    st.error(f"Could not load the career dataset: {error}")
+    st.stop()
 
 
+all_skills = sorted({
+    skill
+    for value in careers_df["skills"]
+    for skill in split_items(value)
+})
 
-if submitted:
-
-    if not name.strip():
-
-        st.warning("Please enter your name.")
-
-    elif not skills and not interests:
-
-        st.warning("Select at least one skill or interest.")
-
-    else:
-
-        try:
-
-            results = calculate_recommendations(skills=skills, interests=interests, education=education, top_n=5)
-
-            if results is None:
-
-                results = []
-
-            if not isinstance(results, list):
-
-                results = results.to_dict(orient="records") if hasattr(results, "to_dict") else list(results)
-
-            if not results:
-
-                st.warning("No recommendations could be generated. Try selecting more skills or interests.")
-
-            else:
-
-                try:
-
-                    profile_id = save_profile(name=name.strip(), education=education, skills=skills, interests=interests, results=results)
-
-                except Exception as db_error:
-
-                    profile_id = None
-
-                    st.warning(f"Recommendations were generated, but the profile could not be saved to the database: {db_error}")
-
-                st.session_state["career_results"] = results
-
-                st.session_state["profile_id"] = profile_id
-
-                st.session_state["student_name"] = name.strip()
-
-                st.session_state["student_skills"] = list(skills)
-
-                st.session_state["student_interests"] = list(interests)
-
-                st.session_state["student_education"] = education
-
-                for key in ("resume_analysis", "resume_analysis_career", "resume_file_name", "resume_detected_count"):
-
-                    st.session_state.pop(key, None)
-
-                st.success("Your career recommendations are ready!")
-
-        except Exception as error:
-
-            st.error(f"Could not generate career recommendations: {error}")
-
-
-
+all_interests = sorted({
+    interest
+    for value in careers_df["interests"]
+    for interest in split_items(value)
+})
 
 # --------------------------------------------------
-# 6. Career recommendations and readiness
+# CareerNova AI — Step 2: Profile Creation
 # --------------------------------------------------
 
-results = st.session_state.get("career_results", [])
-student_skills = st.session_state.get("student_skills", [])
-student_interests = st.session_state.get("student_interests", [])
-student_education = st.session_state.get("student_education", "")
-student_name = st.session_state.get("student_name", "")
+if st.session_state.get("active_page") == "profile":
 
-if results:
     st.markdown(
-        '<div id="career-recommendations"></div>',
+        '<div class="hero-panel" style="text-align:center;">'
+        '<div class="hero-kicker">YOUR CAREER JOURNEY</div>'
+        '<h1 class="main-title">Let\'s Build Your Profile</h1>'
+        '<p class="hero-copy">Tell us about yourself so we can '
+        'recommend career paths that fit you.</p>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
-    st.header(f"🎯 {student_name or 'Your'} Career Recommendations")
-    st.caption(
-        "Explore the strongest matches first. Scores are guidance indicators, "
-        "not guarantees of placement or employment."
+    education_options = [
+        "btech", "bsc", "bca", "mtech",
+        "msc", "bba", "bcom",
+    ]
+
+    saved_education = st.session_state.get(
+        "student_education", "btech"
+    )
+    education_index = (
+        education_options.index(saved_education)
+        if saved_education in education_options
+        else 0
     )
 
-    for index, result in enumerate(results, start=1):
-        if not isinstance(result, dict):
+    with st.form("careernova_profile_form"):
+
+        name = st.text_input(
+            "Your name",
+            value=st.session_state.get("student_name", ""),
+        )
+
+        education = st.selectbox(
+            "Education",
+            education_options,
+            index=education_index,
+            format_func=lambda value: value.upper(),
+        )
+
+        skills = st.multiselect(
+            "Skills you currently have",
+            options=all_skills,
+            default=[
+                item for item in
+                st.session_state.get("student_skills", [])
+                if item in all_skills
+            ],
+            placeholder="Choose your skills",
+        )
+
+        interests = st.multiselect(
+            "Areas that interest you",
+            options=all_interests,
+            default=[
+                item for item in
+                st.session_state.get("student_interests", [])
+                if item in all_interests
+            ],
+            placeholder="Choose your interests",
+        )
+
+        submitted_profile = st.form_submit_button(
+            "🚀 Generate My Career Dashboard",
+            use_container_width=True,
+        )
+
+    if submitted_profile:
+
+        if not name.strip():
+            st.warning("Please enter your name.")
+
+        elif not skills and not interests:
+            st.warning(
+                "Please select at least one skill or interest."
+            )
+
+        else:
             try:
-                result = dict(result)
-            except Exception:
-                result = {"career": str(result)}
-
-        career_name = str(
-            result.get(
-                "career",
-                result.get(
-                    "career_name",
-                    result.get("role", "Career option"),
-                ),
-            )
-        )
-        domain = str(result.get("domain", "Career pathway"))
-
-        match_score = result.get(
-            "match_score",
-            result.get(
-                "score",
-                result.get(
-                    "career_score",
-                    result.get("match_percentage"),
-                ),
-            ),
-        )
-        interest_score = result.get("interest_score")
-
-        # One separate card for each career.
-        with st.container(border=True):
-            st.subheader(f"{index}. {career_name}")
-            st.caption(domain)
-
-            # Calculate career readiness only once.
-            readiness = get_readiness(student_skills, career_name)
-
-            if isinstance(readiness, dict) and readiness:
-                readiness_value = readiness.get(
-                    "readiness_score",
-                    readiness.get("score", 0),
+                results = calculate_recommendations(
+                    skills=skills,
+                    interests=interests,
+                    education=education,
+                    top_n=5,
                 )
 
-                matched_skills = readiness.get("matched_skills", []) or []
-                missing_skills = readiness.get("missing_skills", []) or []
-
-                matched_count = readiness.get(
-                    "total_matched_skills",
-                    len(matched_skills),
-                )
-                total_count = readiness.get(
-                    "total_required_skills",
-                    len(matched_skills) + len(missing_skills),
-                )
-            else:
-                required = get_required_skills(careers_df, career_name)
-                student_set = normalized_set(student_skills)
-
-                matched_skills = [
-                    skill for skill in required
-                    if skill.strip().lower() in student_set
-                ]
-                missing_skills = [
-                    skill for skill in required
-                    if skill.strip().lower() not in student_set
-                ]
-
-                matched_count = len(matched_skills)
-                total_count = len(required)
-
-                readiness_value = (
-                    round(matched_count * 100 / total_count)
-                    if total_count else 0
-                )
-
-            # Keep all three circular graphs in one row.
-            score_col1, score_col2, score_col3 = st.columns(3)
-
-            with score_col1:
-                if match_score is not None:
-                    render_score_ring(match_score, "MATCH SCORE")
-                else:
-                    st.caption("Match score unavailable")
-
-            with score_col2:
-                if interest_score is not None:
-                    render_score_ring(
-                        interest_score,
-                        "INTEREST COVERAGE",
+                if not results:
+                    st.warning(
+                        "No recommendations were generated. "
+                        "Please review your profile and try again."
                     )
-                else:
-                    st.caption("Interest score unavailable")
 
-            with score_col3:
-                try:
-                    readiness_value = float(readiness_value)
-                    if not (
-                        readiness_value == readiness_value
-                        and abs(readiness_value) != float("inf")
+                else:
+                    profile_id = save_profile(
+                        name=name.strip(),
+                        education=education,
+                        skills=skills,
+                        interests=interests,
+                        results=results,
+                    )
+
+                    st.session_state["student_name"] = name.strip()
+                    st.session_state["student_education"] = education
+                    st.session_state["student_skills"] = list(skills)
+                    st.session_state["student_interests"] = list(interests)
+                    st.session_state["career_results"] = results
+                    st.session_state["profile_id"] = profile_id
+
+                    for key in (
+                        "resume_analysis",
+                        "resume_analysis_career",
+                        "resume_file_name",
+                        "resume_detected_count",
                     ):
-                        readiness_value = 0
-                    readiness_value = max(
-                        0, min(100, readiness_value)
-                    )
-                except (TypeError, ValueError, OverflowError):
-                    readiness_value = 0
+                        st.session_state.pop(key, None)
 
-                render_score_ring(
-                    readiness_value,
-                    "CAREER READINESS",
+                    st.session_state["welcome_started"] = True
+                    st.session_state["active_page"] = "dashboard"
+
+                    st.rerun()
+
+            except Exception as error:
+                st.error(f"Could not save your profile: {error}")
+
+    # Do not display the dashboard underneath the profile screen.
+    st.stop()
+
+
+
+# --------------------------------------------------
+# 5. Interactive Career Analytics Dashboard
+# --------------------------------------------------
+
+st.markdown('<div id="career-dashboard"></div>', unsafe_allow_html=True)
+
+profile_name = st.session_state.get("student_name", "")
+profile_skills = st.session_state.get("student_skills", [])
+profile_interests = st.session_state.get("student_interests", [])
+profile_education = st.session_state.get("student_education", "Not added yet")
+career_results = st.session_state.get("career_results", [])
+
+# Header inspired by the provided premium dark dashboard reference.
+st.markdown(
+    f'<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;'
+    f'flex-wrap:wrap;padding:4px 0 14px 0">'
+    f'<div><div style="font-size:1.8rem;font-weight:800;color:#F8FAFC">'
+    f"Good to see you{', ' + profile_name if profile_name else ''}! 👋"
+    f'</div><div style="color:#A7B4CC;margin-top:5px">'
+    f"{'Your career journey is ready to continue.' if profile_name else 'Build your profile to unlock personalized career insights.'}"
+    f'</div></div>'
+    f'<div style="padding:10px 15px;border:1px solid #354365;border-radius:14px;'
+    f'background:rgba(17,26,46,.85);color:#C4B5FD;font-weight:700">✦ CAREERNOVA AI</div>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    '<div style="font-size:1.8rem;font-weight:850;letter-spacing:-.035em;color:#F8FAFC;margin:0 0 2px 0">'
+    'Your Career <span style="background:linear-gradient(90deg,#A78BFA,#38BDF8);'
+    '-webkit-background-clip:text;-webkit-text-fill-color:transparent">Dashboard</span></div>',
+    unsafe_allow_html=True,
+)
+st.caption("Your skills, career matches, and next steps — all in one place.")
+
+# Real metrics only; show a clear setup state before a profile exists.
+if career_results:
+    top_result = career_results[0]
+    try:
+        top_readiness = calculate_career_readiness(profile_skills, top_result["career"])
+        readiness_value = top_readiness["readiness_score"] if top_readiness else 0
+    except Exception:
+        readiness_value = 0
+    match_value = top_result.get("match_score", 0)
+    top_career_name = top_result.get("career", "Not available")
+else:
+    readiness_value = 0
+    match_value = 0
+    top_career_name = "Not generated yet"
+
+
+# --------------------------------------------------
+# Premium Dashboard Metric Cards
+# --------------------------------------------------
+
+st.markdown("""
+<style>
+div[data-testid="stMetric"] {
+    background: linear-gradient(145deg, #111A2E, #151F38);
+    border: 1px solid #293653;
+    padding: 18px 20px;
+    border-radius: 16px;
+    min-height: 115px;
+}
+div[data-testid="stMetricLabel"] {
+    color: #A7B4CC;
+    font-size: 0.9rem;
+}
+div[data-testid="stMetricValue"] {
+    color: #F8FAFC;
+    font-weight: 800;
+}
+</style>
+""", unsafe_allow_html=True)
+
+m1, m2, m3, m4 = st.columns(4, gap="medium")
+
+with m1:
+    st.metric(
+        label="🧠 Profile Skills",
+        value=len(profile_skills),
+        help="Skills saved in your student profile."
+    )
+
+with m2:
+    st.metric(
+        label="🎯 Career Matches",
+        value=len(career_results),
+        help="Career recommendations generated from your profile."
+    )
+
+with m3:
+    st.metric(
+        label="✨ Best Career Match",
+        value=f"{match_value:.0f}%" if career_results else "—",
+        help="Match score for your highest-ranked career."
+    )
+
+with m4:
+    st.metric(
+        label="📈 Career Readiness",
+        value=f"{readiness_value:.0f}%" if career_results else "—",
+        help="Readiness score based on the top recommended career."
+    )
+
+
+left, right = st.columns([1, 1], gap="medium")
+with left:
+    with st.container(border=True):
+        st.markdown("#### Your profile")
+        if profile_name:
+            st.write(f"**Student:** {profile_name}")
+            st.write(f"**Education:** {str(profile_education).upper()}")
+            st.write(f"**Interests:** {', '.join(i.title() for i in profile_interests) if profile_interests else 'Not added yet'}")
+            st.write(f"**Current skills:** {', '.join(skill.title() for skill in profile_skills) if profile_skills else 'No skills added yet'}")
+        else:
+            st.write("Your personalized snapshot will appear here after you submit the Student Profile form below.")
+            st.info("Start by adding your education, skills, and interests.")
+with right:
+    with st.container(border=True):
+        st.markdown("#### Top career match")
+        if career_results:
+            st.markdown(
+                f'<div style="font-size:1.35rem;font-weight:800;color:#C4B5FD">{top_career_name}</div>',
+                unsafe_allow_html=True,
+            )
+            st.progress(min(1.0, max(0.0, float(match_value) / 100)))
+            st.caption(f"Career match: {match_value}% · Based on your submitted profile")
+            st.write("Explore the complete ranked recommendations below to compare career options.")
+        else:
+            st.write("Your top career match will be shown here after recommendations are generated.")
+            if st.button("Build my student profile", key="dashboard_profile_button", use_container_width=True):
+                st.session_state["dashboard_profile_prompt"] = True
+                st.rerun()
+
+
+# --------------------------------------------------
+# Premium Top Career Match Cards
+# --------------------------------------------------
+
+if career_results:
+    st.markdown("### ✨ Your Best Career Matches")
+    st.caption(
+        "Explore your highest-ranked careers and compare how well "
+        "they align with your profile."
+    )
+
+    card_cols = st.columns(min(3, len(career_results)), gap="medium")
+
+    for idx, result in enumerate(career_results[:3]):
+        with card_cols[idx]:
+            with st.container(border=True):
+                career_name = result.get("career", "Career")
+                domain_name = result.get("domain", "Career domain")
+                score = float(result.get("match_score", 0))
+
+                st.markdown(
+                    f'<div style="color:#A78BFA;font-size:.8rem;'
+                    f'font-weight:700;letter-spacing:.08em;">'
+                    f'CAREER MATCH #{idx + 1}</div>',
+                    unsafe_allow_html=True,
                 )
 
-            st.markdown("---")
+                st.markdown(f"#### {career_name}")
+                st.caption(domain_name)
 
-            st.write(
-                f"You currently match **{matched_count} of {total_count}** "
-                "required skills for this role."
+                st.markdown(
+                    f'<div style="font-size:2rem;font-weight:850;'
+                    f'color:#C4B5FD;margin:8px 0 2px 0;">'
+                    f'{score:.0f}%</div>',
+                    unsafe_allow_html=True,
+                )
+
+                st.progress(min(1.0, max(0.0, score / 100)))
+
+                if idx == 0:
+                    st.caption("⭐ Your highest-ranked match")
+                else:
+                    st.caption("Recommended career option")
+
+else:
+    st.markdown(
+        '<div class="hero-panel">'
+        '<div class="hero-kicker">YOUR NEXT STEP</div>'
+        '<p class="hero-copy">'
+        'Complete your student profile to discover career matches, '
+        'readiness insights, and personalized learning opportunities.'
+        '</p></div>',
+        unsafe_allow_html=True,
+    )
+
+st.markdown("---")
+
+
+
+# --------------------------------------------------
+# 6. Profile Management
+# --------------------------------------------------
+
+st.markdown('<div id="student-profile"></div>', unsafe_allow_html=True)
+st.header("👤 My Profile")
+
+if st.session_state.get("student_name"):
+
+    st.write(f"**Name:** {st.session_state['student_name']}")
+    st.write(
+        f"**Education:** "
+        f"{st.session_state.get('student_education', '').upper()}"
+    )
+    st.write(
+        "**Skills:** "
+        + (
+            ", ".join(st.session_state.get("student_skills", []))
+            or "None added"
+        )
+    )
+    st.write(
+        "**Interests:** "
+        + (
+            ", ".join(st.session_state.get("student_interests", []))
+            or "None added"
+        )
+    )
+
+    if st.button("✏️ Update My Profile", key="update_profile"):
+        st.session_state["active_page"] = "profile"
+        st.rerun()
+
+else:
+    st.info("Create your profile to get personalized career recommendations.")
+    if st.button("Create My Profile", key="create_profile_from_dashboard"):
+        st.session_state["welcome_started"] = True
+        st.session_state["active_page"] = "profile"
+        st.rerun()
+
+# --------------------------------------------------
+# 8. Display Career Recommendations and Readiness
+# --------------------------------------------------
+
+if "career_results" in st.session_state:
+
+    results = st.session_state["career_results"]
+    student_skills = st.session_state.get("student_skills", [])
+
+    st.divider()
+
+    st.markdown('<div id="career-recommendations"></div>', unsafe_allow_html=True)
+    st.header(
+        f"🚀 Career Recommendations for "
+        f"{st.session_state['student_name']}"
+    )
+
+    st.caption(
+        "Career Match Score considers skills, interests, and education. "
+        "Career Readiness Score measures required skill coverage. "
+        "Neither score predicts placement probability."
+    )
+
+    for rank, result in enumerate(results, start=1):
+
+        with st.container(border=True):
+
+            st.subheader(f"{rank}. {result['career']}")
+            st.caption(f"Domain: {result['domain']}")
+
+            st.metric(
+                "Career Match Score",
+                f"{result['match_score']}%",
             )
 
-            with st.expander("View skills and readiness details"):
-                matched_col, missing_col = st.columns(2)
+            st.progress(
+                min(
+                    1.0,
+                    max(0.0, result["match_score"] / 100),
+                )
+            )
 
-                with matched_col:
-                    st.markdown("**✅ Skills you already have**")
+            readiness = calculate_career_readiness(
+                student_skills,
+                result["career"],
+            )
 
-                    if matched_skills:
-                        for skill in matched_skills:
-                            st.markdown(f"- {str(skill).title()}")
+            if readiness is not None:
+
+                st.metric(
+                    "🎯 Career Readiness Score",
+                    f"{readiness['readiness_score']} / 100",
+                )
+
+                st.progress(
+                    min(
+                        1.0,
+                        max(
+                            0.0,
+                            readiness["readiness_score"] / 100,
+                        ),
+                    )
+                )
+
+                st.caption(
+                    f"Required skills matched: "
+                    f"{readiness['total_matched_skills']} of "
+                    f"{readiness['total_required_skills']}"
+                )
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.write("**Skills you already have**")
+
+                    if readiness["matched_skills"]:
+                        st.write(
+                            ", ".join(
+                                skill.title()
+                                for skill in readiness["matched_skills"]
+                            )
+                        )
                     else:
                         st.write("No direct skill matches yet.")
 
-                with missing_col:
-                    st.markdown("**📌 Skills to learn next**")
+                with col2:
+                    st.write("**Skills to learn next**")
 
-                    if missing_skills:
-                        for skill in missing_skills:
-                            st.markdown(f"- {str(skill).title()}")
+                    if readiness["missing_skills"]:
+                        st.write(
+                            ", ".join(
+                                skill.title()
+                                for skill in readiness["missing_skills"]
+                            )
+                        )
                     else:
-                        st.success(
-                            "All listed skills for this career are covered."
+                        st.write(
+                            "All listed skills in this career profile "
+                            "are covered."
                         )
 
+            else:
+                st.warning(
+                    "Could not calculate readiness for this career."
+                )
+
+            st.write(
+                f"**Interest coverage:** {result['interest_score']}%"
+            )
+
+            st.write(
+                f"**Education match:** {result['education_score']}%"
+            )
+
+    st.success(
+        "Use these recommendations to explore suitable career paths "
+        "and plan your next learning steps."
+    )
+
+# --------------------------------------------------
+# CareerNova AI — Career Intelligence Engine
 # --------------------------------------------------
 
-# 7. Learning roadmap
+st.divider()
+st.markdown('<div id="career-intelligence"></div>', 
+            unsafe_allow_html=True
+)
 
-# --------------------------------------------------
+st.header("🧠 Career Intelligence")
+st.write(
+    "Understand why careers match your profile, compare career options, "
+    "and discover practical steps to improve your career fit."
+)
 
-st.markdown('<div id="learning-roadmap"></div>', unsafe_allow_html=True)
+if not st.session_state.get("student_name"):
+    st.info("Create your student profile to unlock personalized career intelligence.")
 
-st.header("🗺️ Personalized Learning Roadmap")
-
-if not results:
-
-    st.info("Create your student profile first. Your career recommendations will unlock a tailored learning roadmap.")
+elif not st.session_state.get("career_results"):
+    st.info("Generate your career recommendations first.")
 
 else:
+    intelligence_results = st.session_state["career_results"]
 
-    available_careers = [str(r.get("career", r.get("career_name", r.get("role", "Career option")))) for r in results if isinstance(r, dict)]
+    # Compare the recommended careers without changing the original results.
+    career_names = [
+        result["career"]
+        for result in intelligence_results
+        if result.get("career")
+    ]
 
-    if not available_careers:
+    default_careers = career_names[:min(3, len(career_names))]
 
-        available_careers = careers_df["career"].dropna().astype(str).tolist()
+    selected_intelligence_careers = st.multiselect(
+        "Choose careers to compare",
+        options=career_names,
+        default=default_careers,
+        key="career_intelligence_compare",
+        help="Select up to three careers for a focused comparison.",
+    )
 
-    selected_career_for_roadmap = st.selectbox("Choose a career for your roadmap", options=available_careers, key="roadmap_career")
+    selected_intelligence_careers = selected_intelligence_careers[:3]
 
-    roadmap_readiness = get_readiness(student_skills, selected_career_for_roadmap)
-
-    if roadmap_readiness:
-
-        roadmap_missing = [str(s) for s in roadmap_readiness.get("missing_skills", []) or []]
+    if not selected_intelligence_careers:
+        st.info("Select at least one career to see your insights.")
 
     else:
+        comparison_rows = []
 
-        req = get_required_skills(careers_df, selected_career_for_roadmap)
+        for result in intelligence_results:
+            if result["career"] not in selected_intelligence_careers:
+                continue
 
-        student_set = normalized_set(student_skills)
+            career_name = result["career"]
 
-        roadmap_missing = [s for s in req if s.lower() not in student_set]
+            match_score = float(result.get("match_score", 0))
+            interest_score = float(result.get("interest_score", 0))
+            education_score = float(result.get("education_score", 0))
 
-    if st.button("Generate My Learning Roadmap", key="generate_roadmap", use_container_width=True):
+            readiness = calculate_career_readiness(
+                st.session_state.get("student_skills", []),
+                career_name,
+            )
 
-        with st.spinner("Building your learning roadmap..."):
+            readiness_score = (
+                float(readiness.get("readiness_score", 0))
+                if readiness else 0
+            )
 
-            try:
+            comparison_rows.append({
+                "Career": career_name,
+                "Domain": result.get("domain", "Not specified"),
+                "Career Match (%)": round(match_score, 1),
+                "Interest Match (%)": round(interest_score, 1),
+                "Education Match (%)": round(education_score, 1),
+                "Skill Readiness (%)": round(readiness_score, 1),
+            })
 
-                raw_roadmap = call_roadmap(roadmap_missing, selected_career_for_roadmap)
+        st.subheader("📊 Career Comparison")
 
-                st.session_state["generated_roadmap"] = normalize_roadmap(raw_roadmap, roadmap_missing)
+        if comparison_rows:
+            st.dataframe(
+                comparison_rows,
+                use_container_width=True,
+                hide_index=True,
+            )
 
-                st.session_state["generated_roadmap_career"] = selected_career_for_roadmap
+            st.caption(
+                "Career match reflects the existing recommendation model. "
+                "Skill readiness reflects required-skill coverage. "
+                "These scores are not job or placement probabilities."
+            )
 
-            except Exception as error:
+        st.subheader("🔍 Personalized Career Insights")
 
-                st.error(f"Could not generate the learning roadmap: {error}")
+        insight_columns = st.columns(
+            min(2, len(selected_intelligence_careers))
+        )
 
-    roadmap = st.session_state.get("generated_roadmap", [])
+        for index, career_name in enumerate(
+            selected_intelligence_careers
+        ):
+            result = next(
+                item for item in intelligence_results
+                if item["career"] == career_name
+            )
 
-    if roadmap and st.session_state.get("generated_roadmap_career") == selected_career_for_roadmap:
+            readiness = calculate_career_readiness(
+                st.session_state.get("student_skills", []),
+                career_name,
+            )
 
-        if roadmap_missing:
+            match_score = float(result.get("match_score", 0))
+            interest_score = float(result.get("interest_score", 0))
+            education_score = float(result.get("education_score", 0))
 
-            st.write("Start with the skill gaps below. Work through the topics and practice each skill with a small project.")
+            with insight_columns[index % len(insight_columns)]:
+                with st.container(border=True):
+                    st.markdown(f"### 🎯 {career_name}")
+                    st.metric("Career Match", f"{match_score:.1f}%")
 
-        else:
+                    # Explain the existing model's component scores.
+                    st.markdown("**Why this career appears in your matches**")
 
-            st.success("Your listed skills already match the dataset requirements. Use the roadmap to deepen your skills and build projects.")
-
-        for index, step in enumerate(roadmap, start=1):
-
-            with st.expander(f"Step {index}: {step['skill']}"):
-
-                st.write(f"**Estimated duration:** {step['duration']}")
-
-                st.write(f"**Topics / action:** {step['topics']}")
-
-                if step.get("resource"):
-
-                    resource = step["resource"]
-
-                    if resource.startswith(("https://", "http://")):
-
-                        st.markdown(f"[Open learning resource]({resource})")
-
+                    if interest_score >= 60:
+                        st.write(
+                            f"✅ Strong interest alignment ({interest_score:.0f}%)."
+                        )
+                    elif interest_score > 0:
+                        st.write(
+                            f"🔎 Interest alignment: {interest_score:.0f}%. "
+                            "Explore the role to confirm your interest."
+                        )
                     else:
+                        st.write(
+                            "💡 Your selected interests have limited "
+                            "overlap with this career's dataset."
+                        )
 
-                        st.write(resource)
+                    if education_score >= 60:
+                        st.write(
+                            f"✅ Education alignment ({education_score:.0f}%)."
+                        )
+                    else:
+                        st.write(
+                            f"📚 Education alignment: {education_score:.0f}%. "
+                            "Check the qualifications expected for this role."
+                        )
 
-    elif not st.session_state.get("generated_roadmap"):
+                    if readiness:
+                        missing_skills = readiness.get("missing_skills", [])
+                        matched_skills = readiness.get("matched_skills", [])
 
-        st.caption("Choose a career and select Generate My Learning Roadmap to create your plan.")
+                        st.markdown("**Your next improvement steps**")
 
+                        if matched_skills:
+                            st.write(
+                                "Existing strengths: "
+                                + ", ".join(
+                                    str(skill).title()
+                                    for skill in matched_skills[:5]
+                                )
+                            )
 
+                        if missing_skills:
+                            st.write(
+                                "Skills to prioritize: "
+                                + ", ".join(
+                                    str(skill).title()
+                                    for skill in missing_skills[:5]
+                                )
+                            )
+                            st.caption(
+                                "Use the Learning Roadmap section to plan "
+                                "how to develop these skills."
+                            )
+                        else:
+                            st.success(
+                                "Your profile covers all skills listed "
+                                "for this career in the current dataset."
+                            )
+
+                        st.progress(
+                            max(
+                                0.0,
+                                min(
+                                    1.0,
+                                    readiness["readiness_score"] / 100,
+                                ),
+                            )
+                        )
+                        st.caption(
+                            f"Required-skill coverage: "
+                            f"{readiness['readiness_score']}%"
+                        )
+
+                    st.caption(
+                        "These insights use your profile and the existing "
+                        "career dataset. They are guidance, not a guarantee "
+                        "of career success."
+                    )
 
 
 
 # --------------------------------------------------
-
-# 8. AI resume analyzer
-
+# 9. AI Resume Analyzer
 # --------------------------------------------------
 
-st.markdown('<div id="resume-analyzer"></div>', unsafe_allow_html=True)
-
-st.header("📄 AI Resume Analyzer")
-
-st.write("Upload a PDF resume and compare its detected skills with a career you want to pursue.")
-
-resume_careers = [str(r.get("career", r.get("career_name", r.get("role", "Career option")))) for r in results if isinstance(r, dict)]
-
-if not resume_careers:
-
-    resume_careers = careers_df["career"].dropna().astype(str).tolist()
-
-resume_careers = list(dict.fromkeys(resume_careers))
-
-resume_col, career_col = st.columns([2, 1])
-
-with resume_col:
-
-    uploaded_resume = st.file_uploader("Upload resume (PDF)", type=["pdf"], key="resume_pdf_upload")
-
-with career_col:
-
-    default_resume_career = st.session_state.get("resume_analysis_career") or (resume_careers[0] if resume_careers else "")
-
-    if default_resume_career not in resume_careers and resume_careers:
-
-        default_resume_career = resume_careers[0]
-
-    resume_career = st.selectbox("Target career", options=resume_careers, index=resume_careers.index(default_resume_career) if default_resume_career in resume_careers else 0, key="resume_target_career") if resume_careers else ""
-
-
-
-if st.button("Analyze My Resume", key="analyze_resume", use_container_width=True):
-
-    if uploaded_resume is None:
-
-        st.warning("Please upload a PDF resume first.")
-
-    elif not resume_career:
-
-        st.warning("Please select a target career.")
-
-    else:
-
-        try:
-
-            with st.spinner("Reading your resume and checking its skills..."):
-
-                pdf_bytes = uploaded_resume.getvalue()
-
-                with pymupdf.open(stream=pdf_bytes, filetype="pdf") as pdf_document:
-
-                    resume_text = "\n".join(page.get_text("text") for page in pdf_document)
-
-                if not resume_text.strip():
-
-                    raise ValueError("No readable text was found in this PDF. Try a text-based PDF rather than a scanned image.")
-
-                extracted = extract_skills(resume_text)
-
-                detected = normalized_set(extracted)
-
-                required_skills = get_required_skills(careers_df, resume_career)
-
-                raw_gap = None
-
-                try:
-
-                    raw_gap = analyze_skill_gap(list(detected), required_skills)
-
-                except TypeError:
-
-                    # Support modules whose helper names its two arguments explicitly.
-
-                    try:
-
-                        signature = inspect.signature(analyze_skill_gap)
-
-                        kwargs = {}
-
-                        for parameter in signature.parameters:
-
-                            pname = parameter.lower()
-
-                            if "resume" in pname or "detected" in pname or "candidate" in pname:
-
-                                kwargs[parameter] = list(detected)
-
-                            elif "required" in pname or "career" in pname or "target" in pname or "job" in pname:
-
-                                kwargs[parameter] = required_skills
-
-                        raw_gap = analyze_skill_gap(**kwargs)
-
-                    except Exception:
-
-                        raw_gap = None
-
-                analysis = normalize_gap_result(raw_gap, detected, required_skills)
-
-                # Keep the extracted skill list as well as the standard gap fields.
-
-                analysis["detected_skills"] = sorted(detected)
-
-                analysis["career"] = resume_career
-
-                st.session_state["resume_analysis"] = analysis
-
-                st.session_state["resume_analysis_career"] = resume_career
-
-                st.session_state["resume_file_name"] = uploaded_resume.name
-
-                st.session_state["resume_detected_count"] = len(detected)
-
-        except Exception as error:
-
-            st.error(f"Could not analyze this resume: {error}")
-
-
-
-resume_analysis = st.session_state.get("resume_analysis")
-
-if resume_analysis:
-
-    st.markdown(f"### Resume results: {st.session_state.get('resume_analysis_career', 'Selected career')}")
-
-    metric_col1, metric_col2, metric_col3 = st.columns(3)
-
-    metric_col1.metric("Skill match", f"{resume_analysis.get('match_percentage', 0)}%")
-
-    metric_col2.metric("Matching skills", len(resume_analysis.get("matched_skills", [])))
-
-    metric_col3.metric("Skills to learn", len(resume_analysis.get("missing_skills", [])))
-
-    try:
-
-        st.progress(max(0.0, min(1.0, float(resume_analysis.get("match_percentage", 0)) / 100)))
-
-    except (TypeError, ValueError):
-
-        pass
-
-    matched_col, missing_col = st.columns(2)
-
-    with matched_col:
-
-        st.markdown("**Skills found in the resume and required for this career**")
-
-        if resume_analysis.get("matched_skills"):
-
-            for skill in resume_analysis["matched_skills"]:
-
-                st.markdown(f"- ✅ {skill.title()}")
-
-        else:
-
-            st.write("No matching required skills were detected.")
-
-    with missing_col:
-
-        st.markdown("**Skills not detected in the resume**")
-
-        if resume_analysis.get("missing_skills"):
-
-            for skill in resume_analysis["missing_skills"]:
-
-                st.markdown(f"- 📌 {skill.title()}")
-
-        else:
-
-            st.success("All skills listed for this career were detected.")
-
-    with st.expander("View detected resume skills"):
-
-        detected_skills = resume_analysis.get("detected_skills", [])
-
-        st.write(", ".join(s.title() for s in detected_skills) if detected_skills else "No skills were detected.")
-
-
-
 # --------------------------------------------------
-# 9. Dedicated Skill Gap Analysis
+# CareerNova AI — Dedicated Skill Gap Analysis
 # --------------------------------------------------
 
-st.markdown('<div id="skill-gap-analysis"></div>', unsafe_allow_html=True)
+st.divider()
+
+st.markdown(
+    '<div id="skill-gap-analysis"></div>',
+    unsafe_allow_html=True,
+)
 
 st.header("🧩 Skill Gap Analysis")
 
 st.write(
-    "Analyze your current skills against your target career, "
-    "identify missing skills, and get personalized learning recommendations."
+    "Compare your current skills with the skills required for "
+    "your target career. Discover what you already know and "
+    "what you should learn next."
 )
 
-# Select target career independently of the other sections.
-available_gap_careers = careers_df["career"].dropna().astype(str).unique().tolist()
+student_skills_for_gap = st.session_state.get(
+    "student_skills", []
+)
 
-if available_gap_careers:
-    recommended_gap_careers = [
-        str(item.get("career", item.get("career_name", item.get("role", ""))))
-        for item in results
-        if isinstance(item, dict)
-    ]
+available_gap_careers = (
+    careers_df["career"]
+    .dropna()
+    .astype(str)
+    .drop_duplicates()
+    .tolist()
+)
 
-    gap_default_options = [
-        career for career in recommended_gap_careers
-        if career in available_gap_careers
-    ]
+if not st.session_state.get("student_name"):
 
-    gap_career_options = gap_default_options or available_gap_careers
-
-    selected_gap_career = st.selectbox(
-        "Choose your target career",
-        options=gap_career_options,
-        key="dedicated_gap_career",
+    st.info(
+        "Create your student profile first to analyze your "
+        "personal skill gaps."
     )
-
-    # Choose the source of skills for this separate analysis.
-    has_resume_analysis = bool(st.session_state.get("resume_analysis"))
-
-    skill_sources = ["Student Profile"]
-    if has_resume_analysis:
-        skill_sources.append("Uploaded Resume")
-
-    selected_skill_source = st.radio(
-        "Analyze skills from",
-        options=skill_sources,
-        horizontal=True,
-        key="dedicated_gap_source",
-    )
-
-    if selected_skill_source == "Uploaded Resume":
-        resume_data = st.session_state.get("resume_analysis", {})
-
-        if resume_data.get("career") == selected_gap_career:
-            analysis_skills = resume_data.get("detected_skills", [])
-        else:
-            st.info(
-                "Your saved resume analysis targets a different career. "
-                "Upload and analyze your resume for this career in the "
-                "Resume Analyzer section first."
-            )
-            analysis_skills = []
-    else:
-        analysis_skills = st.session_state.get("student_skills", [])
-
-    required_gap_skills = get_required_skills(
-        careers_df, selected_gap_career
-    )
-
-    current_skill_set = normalized_set(analysis_skills)
-
-    matched_gap_skills = [
-        skill for skill in required_gap_skills
-        if skill.strip().lower() in current_skill_set
-    ]
-
-    missing_gap_skills = [
-        skill for skill in required_gap_skills
-        if skill.strip().lower() not in current_skill_set
-    ]
-
-    gap_percentage = (
-        round(len(matched_gap_skills) * 100 / len(required_gap_skills))
-        if required_gap_skills else 0
-    )
-
-    st.markdown("---")
-
-    if not analysis_skills:
-        st.warning(
-            "No skills are available for this analysis. "
-            "Complete your Student Profile or analyze a resume first."
-        )
-
-    if not required_gap_skills:
-        st.warning(
-            "No required skills were found for this career in the dataset."
-        )
-    else:
-        metric1, metric2, metric3 = st.columns(3)
-
-        metric1.metric(
-            "Matched Skills",
-            len(matched_gap_skills),
-        )
-        metric2.metric(
-            "Missing Skills",
-            len(missing_gap_skills),
-        )
-        metric3.metric(
-            "Skill Match",
-            f"{gap_percentage}%",
-        )
-
-        st.progress(gap_percentage / 100)
-
-        st.caption(
-            f"You match {len(matched_gap_skills)} of "
-            f"{len(required_gap_skills)} required skills for "
-            f"{selected_gap_career}."
-        )
-
-        matched_col, missing_col = st.columns(2)
-
-        with matched_col:
-            st.subheader("✅ Skills You Have")
-
-            if matched_gap_skills:
-                for skill in matched_gap_skills:
-                    st.markdown(f"- {skill.title()}")
-            else:
-                st.info("No matching skills found yet.")
-
-        with missing_col:
-            st.subheader("📌 Skills to Develop")
-
-            if missing_gap_skills:
-                for skill in missing_gap_skills:
-                    st.markdown(f"- {skill.title()}")
-            else:
-                st.success("You match all the listed required skills!")
-
-        st.markdown("---")
 
 else:
-    st.warning("No careers are available in the career dataset.")
+
+    recommended_careers = [
+        result.get("career")
+        for result in st.session_state.get("career_results", [])
+    ]
+
+    preferred_career = next(
+        (
+            career
+            for career in recommended_careers
+            if career in available_gap_careers
+        ),
+        available_gap_careers[0] if available_gap_careers else None,
+    )
+
+    if available_gap_careers:
+
+        default_index = available_gap_careers.index(
+            preferred_career
+        )
+
+        selected_gap_career = st.selectbox(
+            "Choose your target career",
+            options=available_gap_careers,
+            index=default_index,
+            key="dedicated_skill_gap_career",
+        )
+
+        if st.button(
+            "🔍 Analyze My Skill Gaps",
+            key="dedicated_skill_gap_button",
+            use_container_width=True,
+        ):
+
+            selected_row = careers_df[
+                careers_df["career"] == selected_gap_career
+            ].iloc[0]
+
+            required_gap_skills = split_items(
+                selected_row["skills"]
+            )
+
+            gap_results = analyze_skill_gap(
+                student_skills_for_gap,
+                required_gap_skills,
+            )
+
+            st.session_state["dedicated_gap_results"] = gap_results
+            st.session_state["dedicated_gap_career"] = (
+                selected_gap_career
+            )
+
+        gap_results = st.session_state.get(
+            "dedicated_gap_results"
+        )
+
+        saved_gap_career = st.session_state.get(
+            "dedicated_gap_career"
+        )
+
+        if gap_results and saved_gap_career == selected_gap_career:
+
+            st.subheader(
+                f"Your Skill Gap Report: {selected_gap_career}"
+            )
+
+            matched = gap_results.get("matched_skills", [])
+            missing = gap_results.get("missing_skills", [])
+            percentage = gap_results.get("match_percentage", 0)
+
+            col1, col2, col3 = st.columns(3)
+
+            col1.metric("Skills Matched", len(matched))
+            col2.metric("Skills to Learn", len(missing))
+            col3.metric("Skill Match", f"{percentage}%")
+
+            st.progress(
+                max(0.0, min(1.0, float(percentage) / 100))
+            )
+
+            with st.container(border=True):
+
+                st.markdown("#### ✅ Skills You Already Have")
+
+                if matched:
+                    for skill in matched:
+                        st.write(f"✅ {str(skill).title()}")
+                else:
+                    st.info(
+                        "No required skills matched yet. "
+                        "This is your starting point."
+                    )
+
+            with st.container(border=True):
+
+                st.markdown("#### 📚 Skills You Need to Learn")
+
+                if missing:
+                    for skill in missing:
+                        st.write(f"🎯 {str(skill).title()}")
+
+                    st.caption(
+                        "Prioritize these skills when building "
+                        "your learning roadmap."
+                    )
+
+                else:
+                    st.success(
+                        "All skills listed in this career's "
+                        "dataset are covered by your profile."
+                    )
+
+            st.caption(
+                "This score measures skill overlap with the "
+                "career dataset. It is not a job placement "
+                "probability or a guarantee of employability."
+            )
+
+    else:
+        st.warning("No target careers are available in the dataset.")
+
+    
+# --------------------------------------------------
+# CareerNova AI — Personalized Learning Roadmap
+# --------------------------------------------------
+
+st.divider()
+
+st.markdown(
+    '<div id="learning-roadmap"></div>',
+    unsafe_allow_html=True,
+)
+
+st.header("🗺️ Personalized Learning Roadmap")
+
+st.write(
+    "Turn your skill gaps into an actionable learning plan "
+    "based on your selected target career."
+)
+
+roadmap_careers = (
+    careers_df["career"]
+    .dropna()
+    .astype(str)
+    .drop_duplicates()
+    .tolist()
+)
+
+if not st.session_state.get("student_name"):
+
+    st.info(
+        "Create your student profile first to generate "
+        "a personalized learning roadmap."
+    )
+
+elif not roadmap_careers:
+
+    st.warning("No careers are available in the dataset.")
+
+else:
+
+    previous_gap_career = st.session_state.get(
+        "dedicated_gap_career"
+    )
+
+    default_roadmap_career = (
+        previous_gap_career
+        if previous_gap_career in roadmap_careers
+        else roadmap_careers[0]
+    )
+
+    roadmap_career = st.selectbox(
+        "Choose a career for your roadmap",
+        options=roadmap_careers,
+        index=roadmap_careers.index(default_roadmap_career),
+        key="independent_roadmap_career",
+    )
+
+    if st.button(
+        "🚀 Generate My Learning Roadmap",
+        key="independent_roadmap_button",
+        use_container_width=True,
+    ):
+
+        roadmap_row = careers_df[
+            careers_df["career"] == roadmap_career
+        ].iloc[0]
+
+        roadmap_required_skills = split_items(
+            roadmap_row["skills"]
+        )
+
+        roadmap_current_skills = st.session_state.get(
+            "student_skills", []
+        )
+
+        roadmap_analysis = analyze_skill_gap(
+            roadmap_current_skills,
+            roadmap_required_skills,
+        )
+
+        roadmap_missing_skills = roadmap_analysis.get(
+            "missing_skills", []
+        )
+
+        st.session_state["independent_roadmap_data"] = {
+            "career": roadmap_career,
+            "missing_skills": roadmap_missing_skills,
+        }
+
+    roadmap_data = st.session_state.get(
+        "independent_roadmap_data"
+    )
+
+    if roadmap_data and roadmap_data["career"] == roadmap_career:
+
+        missing_for_roadmap = roadmap_data["missing_skills"]
+
+        if missing_for_roadmap:
+
+            learning_plan = generate_learning_roadmap(
+                missing_for_roadmap
+            )
+
+            st.subheader(
+                f"Your Roadmap for {roadmap_career}"
+            )
+
+            st.caption(
+                f"Focus areas: {len(missing_for_roadmap)} "
+                "skills identified from your profile."
+            )
+
+            st.markdown("#### 🎯 Skills to Focus On")
+
+            for skill in missing_for_roadmap:
+                st.write(f"📌 {str(skill).title()}")
+
+            st.markdown("#### 📅 Your Learning Plan")
+
+            if isinstance(learning_plan, dict):
+
+                for topic, details in learning_plan.items():
+
+                    with st.expander(str(topic), expanded=True):
+
+                        if isinstance(details, dict):
+
+                            for label, value in details.items():
+                                st.markdown(
+                                    f"**{str(label).replace('_', ' ').title()}:** "
+                                    f"{value}"
+                                )
+
+                        elif isinstance(details, list):
+
+                            for item in details:
+                                st.write(f"• {item}")
+
+                        else:
+                            st.write(details)
+
+            elif isinstance(learning_plan, list):
+
+                for index, item in enumerate(learning_plan, start=1):
+
+                    with st.container(border=True):
+
+                        st.markdown(f"**Step {index}**")
+
+                        if isinstance(item, dict):
+
+                            for label, value in item.items():
+                                st.markdown(
+                                    f"**{str(label).replace('_', ' ').title()}:** "
+                                    f"{value}"
+                                )
+
+                        else:
+                            st.write(item)
+
+            else:
+                st.write(learning_plan)
+
+        else:
+
+            st.success(
+                "Your profile already covers all the skills "
+                "listed for this career in the dataset. "
+                "Consider advanced topics and practical projects."
+            )
 
 
 # --------------------------------------------------
-# Keep the existing AI Career Mentor section below
+# CareerNova AI — Adaptive Skill Growth
+# --------------------------------------------------
+
+st.divider()
+
+st.markdown(
+    '<div id="adaptive-skill-growth"></div>',
+    unsafe_allow_html=True,
+)
+
+st.header("📈 Adaptive Skill Growth")
+
+st.write(
+    "Track your learning journey, update the status of each "
+    "career skill, and identify your next learning priority."
+)
+
+if not st.session_state.get("student_name"):
+
+    st.info(
+        "Create your student profile first to track your "
+        "personalized skill growth."
+    )
+
+else:
+
+    adaptive_careers = (
+        careers_df["career"]
+        .dropna()
+        .astype(str)
+        .drop_duplicates()
+        .tolist()
+    )
+
+    if not adaptive_careers:
+
+        st.warning("No careers are available in the dataset.")
+
+    else:
+
+        previous_adaptive_career = st.session_state.get(
+            "dedicated_gap_career"
+        )
+
+        if previous_adaptive_career not in adaptive_careers:
+            previous_adaptive_career = st.session_state.get(
+                "independent_roadmap_career"
+            )
+
+        if previous_adaptive_career not in adaptive_careers:
+            previous_adaptive_career = adaptive_careers[0]
+
+        selected_adaptive_career = st.selectbox(
+            "Choose your target career",
+            options=adaptive_careers,
+            index=adaptive_careers.index(
+                previous_adaptive_career
+            ),
+            key="adaptive_growth_career",
+        )
+
+        adaptive_row = careers_df[
+            careers_df["career"] == selected_adaptive_career
+        ].iloc[0]
+
+        adaptive_required_skills = split_items(
+            adaptive_row["skills"]
+        )
+
+        adaptive_progress = st.session_state.setdefault(
+            "adaptive_skill_progress", {}
+        )
+
+        career_progress = adaptive_progress.setdefault(
+            selected_adaptive_career, {}
+        )
+
+        # Recognize skills already listed in the student profile.
+        initial_analysis = analyze_skill_gap(
+            st.session_state.get("student_skills", []),
+            adaptive_required_skills,
+        )
+
+        initially_matched = {
+            str(skill).casefold()
+            for skill in initial_analysis.get("matched_skills", [])
+        }
+
+        if adaptive_required_skills:
+
+            st.markdown("### 🎯 Your Skill Development Tracker")
+
+            st.caption(
+                "Update each status as you learn. Skills already "
+                "listed in your profile start as Completed unless "
+                "you have previously tracked them."
+            )
+
+            for index, skill in enumerate(adaptive_required_skills):
+
+                skill_name = str(skill)
+                skill_key = (
+                    f"adaptive_status_{selected_adaptive_career}_{index}"
+                )
+
+                if skill_name not in career_progress:
+                    career_progress[skill_name] = (
+                        "Completed"
+                        if skill_name.casefold() in initially_matched
+                        else "Not Started"
+                    )
+
+                if skill_key not in st.session_state:
+                    st.session_state[skill_key] = career_progress[
+                        skill_name
+                    ]
+
+                with st.container(border=True):
+
+                    skill_col, status_col = st.columns(
+                        [2, 1]
+                    )
+
+                    with skill_col:
+                        st.markdown(
+                            f"**{index + 1}. {skill_name.title()}**"
+                        )
+
+                    with status_col:
+                        updated_status = st.selectbox(
+                            "Learning status",
+                            options=[
+                                "Not Started",
+                                "In Progress",
+                                "Completed",
+                            ],
+                            key=skill_key,
+                            label_visibility="collapsed",
+                        )
+
+                    career_progress[skill_name] = updated_status
+
+            # Save progress for this career in the current session.
+            adaptive_progress[
+                selected_adaptive_career
+            ] = career_progress
+
+            total_skills = len(adaptive_required_skills)
+
+            completed_count = sum(
+                1
+                for skill in adaptive_required_skills
+                if career_progress.get(str(skill)) == "Completed"
+            )
+
+            in_progress_count = sum(
+                1
+                for skill in adaptive_required_skills
+                if career_progress.get(str(skill)) == "In Progress"
+            )
+
+            progress_percentage = round(
+                completed_count / total_skills * 100
+            )
+
+            st.markdown("### 📊 Your Learning Progress")
+
+            metric1, metric2, metric3 = st.columns(3)
+
+            metric1.metric(
+                "Completed",
+                f"{completed_count}/{total_skills}",
+            )
+
+            metric2.metric(
+                "In Progress",
+                in_progress_count,
+            )
+
+            metric3.metric(
+                "Progress",
+                f"{progress_percentage}%",
+            )
+
+            st.progress(progress_percentage / 100)
+
+            in_progress_skill = next(
+                (
+                    str(skill)
+                    for skill in adaptive_required_skills
+                    if career_progress.get(str(skill)) == "In Progress"
+                ),
+                None,
+            )
+
+            next_skill = in_progress_skill or next(
+                (
+                    str(skill)
+                    for skill in adaptive_required_skills
+                    if career_progress.get(str(skill)) == "Not Started"
+                ),
+                None,
+            )
+
+            st.markdown("### 🚀 Your Next Priority")
+
+            if next_skill:
+
+                st.info(
+                    f"Focus on **{next_skill.title()}** next. "
+                    "Study the topic, practise with exercises, "
+                    "and update its status when you make progress."
+                )
+
+            else:
+
+                st.success(
+                    "Excellent! All listed skills are marked "
+                    "Completed. Consider advanced topics and "
+                    "practical projects to strengthen your skills."
+                )
+
+            st.caption(
+                "Progress is tracked separately for each career "
+                "in the current Streamlit session. It is not yet "
+                "saved permanently to the database."
+            )
+
+        else:
+
+            st.info(
+                "No required skills are listed for this career "
+                "in the current dataset."
+            )
+
+
+st.divider()
+
+st.markdown('<div id="resume-analyzer"></div>', unsafe_allow_html=True)
+st.header("📄 AI Resume Analyzer")
+
+st.write(
+    "Upload your resume to discover your existing skills, "
+    "compare them with a career, and identify skills to learn."
+)
+
+uploaded_resume = st.file_uploader(
+    "Upload your resume (PDF)",
+    type=["pdf"],
+    key="resume_upload",
+)
+
+
+if uploaded_resume is not None:
+
+    try:
+        pdf_bytes = uploaded_resume.getvalue()
+
+        with pymupdf.open(
+            stream=pdf_bytes,
+            filetype="pdf",
+        ) as pdf:
+
+            resume_text = "\n".join(
+                page.get_text()
+                for page in pdf
+            )
+
+        if not resume_text.strip():
+
+            st.warning(
+                "No readable text was found. "
+                "Scanned resumes require OCR support."
+            )
+
+        else:
+            resume_skills = extract_skills(resume_text)
+            st.session_state["resume_detected_skills"] = resume_skills
+            st.session_state["resume_detected_skills"] = resume_skills
+
+            st.subheader("Skills Found in Your Resume")
+
+            if resume_skills:
+                st.success(
+                    f"Detected {len(resume_skills)} recognized skills."
+                )
+                st.write(", ".join(resume_skills))
+            else:
+                st.info(
+                    "No recognized skills were found. "
+                    "Check whether your resume lists technical skills."
+                )
+
+            career_names = careers_df["career"].tolist()
+
+            selected_career = st.selectbox(
+                "Choose a career to analyze",
+                career_names,
+                key="resume_career",
+            )
+
+            selected_row = careers_df[
+                careers_df["career"] == selected_career
+            ].iloc[0]
+
+            required_skills = split_items(
+                selected_row["skills"]
+            )
+
+            if st.button(
+                "Analyze My Skill Gap",
+                use_container_width=True,
+                key="analyze_resume",
+            ):
+
+                analysis = analyze_skill_gap(
+                    resume_skills,
+                    required_skills,
+                )
+
+                st.session_state["resume_analysis"] = analysis
+                st.session_state["resume_analysis_career"] = (
+                    selected_career
+                )
+                st.session_state["resume_detected_count"] = (
+                    len(resume_skills)
+                )
+                st.session_state["resume_file_name"] = (
+                    uploaded_resume.name
+                )
+
+            analysis = st.session_state.get("resume_analysis")
+
+            same_resume = (
+                st.session_state.get("resume_file_name")
+                == uploaded_resume.name
+            )
+
+            same_career = (
+                st.session_state.get("resume_analysis_career")
+                == selected_career
+            )
+
+            if analysis is not None and same_resume and same_career:
+
+                st.divider()
+
+                st.subheader(f"Results for {selected_career}")
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.metric(
+                        "Skill Match",
+                        f"{analysis['match_percentage']}%",
+                    )
+
+                with col2:
+                    st.metric(
+                        "Skills Detected",
+                        st.session_state["resume_detected_count"],
+                    )
+
+                st.progress(
+                    max(
+                        0.0,
+                        min(
+                            1.0,
+                            analysis["match_percentage"] / 100,
+                        ),
+                    )
+                )
+
+                st.markdown("### ✅ Matching Skills")
+
+                if analysis["matched_skills"]:
+                    for skill in analysis["matched_skills"]:
+                        st.write(f"✅ {skill.title()}")
+                else:
+                    st.info("No matching skills found.")
+
+                st.markdown("### 📚 Missing Skills to Learn")
+
+                if analysis["missing_skills"]:
+                    for skill in analysis["missing_skills"]:
+                        st.write(f"❌ {skill.title()}")
+                else:
+                    st.success(
+                        "All required skills in this sample "
+                        "career profile were found!"
+                    )
+
+                st.caption(
+                    "The score measures overlap with skills listed "
+                    "in the sample career dataset. It is not an ATS "
+                    "score or a guarantee of employability."
+                )
+
+
+    except Exception as error:
+        st.error(
+            f"Could not analyze this resume: {error}"
+        )
+
+
+# --------------------------------------------------
+# 10. Personalized CareerCompass AI Chatbot
 # --------------------------------------------------
 
 # --------------------------------------------------
-
-# 10. Personalized AI career mentor
-
+# CareerNova AI — Job Readiness & Simulation
 # --------------------------------------------------
+
+st.markdown('<div id="job-readiness-simulation"></div>', unsafe_allow_html=True)
+
+st.markdown("## 🧪 Job Readiness & Simulation")
+st.markdown(
+    "Evaluate your skill coverage, identify job requirements you need to learn, "
+    "and practise interview questions with AI feedback."
+)
+
+# Get available career options
+career_options = careers_df["career"].dropna().unique().tolist()
+
+if career_options:
+    target_career = st.selectbox(
+        "🎯 Select your target career",
+        career_options,
+        key="job_simulation_career",
+    )
+
+    # Collect skills from the profile and uploaded resume
+    profile_skills = st.session_state.get("student_skills", [])
+    resume_skills = st.session_state.get("resume_detected_skills", [])
+
+    if isinstance(profile_skills, str):
+        profile_skills = split_items(profile_skills)
+
+    if isinstance(resume_skills, str):
+        resume_skills = split_items(resume_skills)
+
+    candidate_skill_map = {}
+
+    for skill in list(profile_skills) + list(resume_skills):
+        skill = str(skill).strip()
+        if skill:
+            candidate_skill_map[skill.lower()] = skill
+
+    candidate_skills = list(candidate_skill_map.values())
+
+    st.markdown("### 1. Job Description Skill Match")
+
+    job_description = st.text_area(
+        "Paste a job description (optional)",
+        placeholder=(
+            "Paste the responsibilities and required skills from a job posting. "
+            "Leave blank to assess skills against your selected career."
+        ),
+        height=150,
+        key="job_simulation_description",
+    )
+
+    if st.button("🔍 Analyse Job Readiness", key="analyse_job_readiness"):
+        if not candidate_skills:
+            st.warning(
+                "Please add skills to My Profile or upload a resume "
+                "in Resume Analysis before running the assessment."
+            )
+        else:
+            if job_description.strip():
+                required_skills = extract_skills(job_description)
+
+                if not required_skills:
+                    st.warning(
+                        "No recognised skills were detected in that job description. "
+                        "Try including its technical skills, or leave the description "
+                        "blank to assess against the selected career."
+                    )
+                    st.stop()
+            else:
+                career_rows = careers_df[
+                    careers_df["career"] == target_career
+                ]
+
+                if career_rows.empty:
+                    required_skills = []
+                else:
+                    required_skills = split_items(
+                        career_rows.iloc[0]["skills"]
+                    )
+
+            if not required_skills:
+                st.warning(
+                    "No required skills were found for this assessment. "
+                    "Please choose another career or provide a job description."
+                )
+            else:
+                result = analyze_skill_gap(
+                    candidate_skills,
+                    required_skills,
+                )
+
+                st.session_state["job_readiness_match"] = result
+                st.session_state["job_readiness_career"] = target_career
+                st.session_state["job_readiness_required_skills"] = required_skills
+                st.session_state["job_readiness_candidate_skills"] = candidate_skills
+                st.session_state["job_readiness_description"] = job_description
+
+    # Display the most recent skill-match result
+    result = st.session_state.get("job_readiness_match")
+
+    if (
+        result
+        and st.session_state.get("job_readiness_career") == target_career
+    ):
+        st.markdown("#### Your Skill Match Results")
+
+        match_score = result.get("match_percentage", 0)
+        matched_skills = result.get("matched_skills", [])
+        missing_skills = result.get("missing_skills", [])
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Skill Match", f"{match_score}%")
+
+        with col2:
+            st.metric("Matched Skills", len(matched_skills))
+
+        with col3:
+            st.metric("Skills to Develop", len(missing_skills))
+
+        st.progress(max(0, min(100, int(match_score))) / 100)
+
+        st.caption(
+            "This percentage measures skill coverage against the selected "
+            "requirements. It is not a prediction of hiring success."
+        )
+
+        with st.expander("✅ Skills You Already Have", expanded=True):
+            if matched_skills:
+                st.write(", ".join(matched_skills))
+            else:
+                st.write("No matching skills detected yet.")
+
+        with st.expander("📚 Skills to Improve"):
+            if missing_skills:
+                st.write(", ".join(missing_skills))
+                st.info(
+                    "Use the Learning Roadmap and Adaptive Skill Growth "
+                    "sections to plan your next learning steps."
+                )
+            else:
+                st.success("All recognised skills in this assessment matched!")
+
+    st.divider()
+    st.markdown("### 2. AI Mock Interview")
+
+    interview_mode = st.selectbox(
+        "Choose an interview type",
+        ["Technical", "HR", "Behavioural"],
+        key="job_simulation_interview_mode",
+    )
+
+    career_lower = target_career.lower()
+
+    if interview_mode == "HR":
+        questions = [
+            "Tell me about yourself and your career goals.",
+            "What are your strengths, and how do they help you in a team?",
+            "Describe a challenge you faced in a project and how you handled it.",
+        ]
+    elif interview_mode == "Behavioural":
+        questions = [
+            "Describe a time you solved a difficult problem. What was your approach?",
+            "Tell me about a time you received feedback. How did you respond?",
+            "Describe a situation where you worked with a team to achieve a goal.",
+        ]
+    elif any(word in career_lower for word in ["data", "machine learning", "analyst"]):
+        questions = [
+            "How would you handle missing values in a dataset?",
+            "Explain a data or machine-learning project you have worked on.",
+            "How would you evaluate a machine-learning model and check for overfitting?",
+        ]
+    elif any(word in career_lower for word in ["cyber", "security"]):
+        questions = [
+            "How would you investigate a suspicious login attempt?",
+            "What is phishing, and how can an organisation reduce phishing risks?",
+            "Explain the principle of least privilege with an example.",
+        ]
+    elif any(word in career_lower for word in ["developer", "software", "java", "python", "engineer"]):
+        questions = [
+            "Explain object-oriented programming and give a practical example.",
+            "How would you debug a program that produces an unexpected result?",
+            "Describe an API and explain how an application can use one.",
+        ]
+    else:
+        questions = [
+            f"What core skills are important for a {target_career}?",
+            "Describe a project or task that demonstrates your problem-solving ability.",
+            "How would you approach learning an unfamiliar tool or technology?",
+        ]
+
+    interview_question = st.selectbox(
+        "Select a practice question",
+        questions,
+        key="job_simulation_question",
+    )
+
+    interview_answer = st.text_area(
+        "Write your answer",
+        placeholder="Type your answer as if you were in a real interview...",
+        height=160,
+        key="job_simulation_answer",
+    )
+
+    if st.button("🤖 Evaluate My Answer", key="evaluate_interview_answer"):
+        if not interview_answer.strip():
+            st.warning("Please write an answer before requesting feedback.")
+        else:
+            feedback_prompt = f"""
+You are a supportive but honest technical interviewer for CareerNova AI.
+
+Target career: {target_career}
+Interview type: {interview_mode}
+Interview question: {interview_question}
+
+Candidate's answer:
+{interview_answer}
+
+Evaluate the answer using this structure:
+1. What the candidate did well
+2. Missing points or inaccuracies
+3. Specific suggestions to improve
+4. A sample improved answer
+
+Be beginner-friendly, constructive, accurate, and specific to the target career.
+Do not claim the candidate has experience or skills that they did not mention.
+"""
+
+            try:
+                with st.spinner("AI is reviewing your answer..."):
+                    feedback = get_career_response(
+                        feedback_prompt,
+                        conversation_history=[],
+                    )
+
+                st.session_state["job_interview_feedback"] = feedback
+                st.session_state["job_interview_question"] = interview_question
+                st.session_state["job_interview_answer"] = interview_answer
+                st.session_state["job_interview_career"] = target_career
+                st.session_state["job_interview_mode"] = interview_mode
+
+            except Exception as error:
+                st.error(
+                    "Unable to generate interview feedback right now. "
+                    "Please check your AI configuration and try again."
+                )
+                st.caption(str(error))
+
+    feedback = st.session_state.get("job_interview_feedback")
+
+    if (
+        feedback
+        and st.session_state.get("job_interview_career") == target_career
+    ):
+        st.markdown("#### 📝 AI Interview Feedback")
+        st.markdown(feedback)
+
+    st.divider()
+    st.markdown("### 3. Download Your Readiness Report")
+
+    if (
+        st.session_state.get("job_readiness_match")
+        and st.session_state.get("job_readiness_career") == target_career
+    ):
+        result = st.session_state["job_readiness_match"]
+
+        report_lines = [
+            "CareerNova AI — Job Readiness Report",
+            "=" * 42,
+            f"Target career: {target_career}",
+            f"Skill match: {result.get('match_percentage', 0)}%",
+            "",
+            "Matched skills:",
+            ", ".join(result.get("matched_skills", [])) or "None detected",
+            "",
+            "Skills to develop:",
+            ", ".join(result.get("missing_skills", [])) or "None detected",
+        ]
+
+        if (
+            st.session_state.get("job_interview_feedback")
+            and st.session_state.get("job_interview_career") == target_career
+        ):
+            report_lines.extend([
+                "",
+                "Mock Interview",
+                "-" * 20,
+                f"Interview type: {st.session_state.get('job_interview_mode', '')}",
+                f"Question: {st.session_state.get('job_interview_question', '')}",
+                f"Your answer: {st.session_state.get('job_interview_answer', '')}",
+                "",
+                "AI feedback:",
+                str(st.session_state["job_interview_feedback"]),
+            ])
+
+        st.download_button(
+            "⬇️ Download Readiness Report",
+            data="\n".join(report_lines),
+            file_name="careernova_job_readiness_report.txt",
+            mime="text/plain",
+            key="download_job_readiness_report",
+        )
+    else:
+        st.caption(
+            "Run the skill-match assessment first to create your report."
+        )
+
+else:
+    st.warning("No career options were found in the career dataset.")
+
+
+st.divider()
 
 st.markdown('<div id="career-chatbot"></div>', unsafe_allow_html=True)
+st.header("🤖 CareerNova AI Chatbot")
 
-st.header("🤖 AI Career Mentor")
+st.write(
+    "Ask about career paths, missing skills, internships, projects, "
+    "placements, interview preparation, or learning roadmaps. "
+    "The chatbot can use your saved profile and career results."
+)
 
-st.write("Ask about career options, skill gaps, interviews, projects, or how to plan your learning.")
-
-
-
-# Build profile context from the saved profile and latest resume analysis.
-
-def build_profile_context() -> str:
-
-    parts = []
-
-    if st.session_state.get("student_name"):
-
-        parts.append(f"Student name: {st.session_state['student_name']}")
-
-    if st.session_state.get("student_education"):
-
-        parts.append(f"Education: {st.session_state['student_education']}")
-
-    current_skills = st.session_state.get("student_skills", [])
-
-    current_interests = st.session_state.get("student_interests", [])
-
-    parts.append("Student skills: " + (", ".join(current_skills) if current_skills else "Not provided"))
-
-    parts.append("Student interests: " + (", ".join(current_interests) if current_interests else "Not provided"))
-
-    current_results = st.session_state.get("career_results", [])
-
-    if current_results:
-
-        career_names = [str(r.get("career", r.get("career_name", ""))) for r in current_results if isinstance(r, dict)]
-
-        if career_names:
-
-            parts.append("Recommended careers: " + ", ".join(career_names))
-
-        first_career = career_names[0] if career_names else ""
-
-        if first_career:
-
-            readiness = get_readiness(current_skills, first_career)
-
-            if readiness:
-
-                parts.append(f"Readiness score for {first_career}: {readiness.get('readiness_score', 0)}%")
-
-                parts.append("Matched skills: " + (", ".join(readiness.get("matched_skills", []) or []) or "None"))
-
-                parts.append("Missing skills: " + (", ".join(readiness.get("missing_skills", []) or []) or "None"))
-
-    latest_resume = st.session_state.get("resume_analysis")
-
-    if latest_resume:
-
-        parts.append("Latest resume target career: " + str(st.session_state.get("resume_analysis_career", "Unknown")))
-
-        parts.append(f"Latest resume skill match: {latest_resume.get('match_percentage', 0)}%")
-
-        parts.append("Resume-matched skills: " + (", ".join(latest_resume.get("matched_skills", []) or []) or "None"))
-
-        parts.append("Resume missing skills: " + (", ".join(latest_resume.get("missing_skills", []) or []) or "None"))
-
-    return "\n".join(parts)
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
 
 
-
+# Display previous messages
 for message in st.session_state["chat_history"]:
-
-    with st.chat_message(message.get("role", "assistant")):
-
-        st.markdown(message.get("content", ""))
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
 
+# Chat input
+if prompt := st.chat_input("Ask your career question..."):
 
-prompt = st.chat_input("Ask your AI career mentor...")
-
-if prompt:
-
-    st.session_state["chat_history"].append({"role": "user", "content": prompt})
+    st.session_state["chat_history"].append(
+        {
+            "role": "user",
+            "content": prompt,
+        }
+    )
 
     with st.chat_message("user"):
-
         st.markdown(prompt)
 
-    context = build_profile_context()
+    # Build profile context
+    profile_context = ""
 
+    if "student_name" in st.session_state:
+
+        student_name = st.session_state.get(
+            "student_name",
+            "Student",
+        )
+
+        education = st.session_state.get(
+            "student_education",
+            "Not provided",
+        )
+
+        skills = st.session_state.get(
+            "student_skills",
+            [],
+        )
+
+        interests = st.session_state.get(
+            "student_interests",
+            [],
+        )
+
+        career_results = st.session_state.get(
+            "career_results",
+            [],
+        )
+
+        profile_context = (
+            "\n\nSTUDENT PROFILE — use when relevant:\n"
+            f"Name: {student_name}\n"
+            f"Education: {education}\n"
+            f"Current skills: {', '.join(skills) or 'Not provided'}\n"
+            f"Interests: {', '.join(interests) or 'Not provided'}\n"
+        )
+
+        if career_results:
+            profile_context += "\nCAREER RECOMMENDATIONS:\n"
+
+            for result in career_results:
+
+                career_name = result.get(
+                    "career",
+                    "Unknown career",
+                )
+
+                match_score = result.get(
+                    "match_score",
+                    0,
+                )
+
+                readiness = calculate_career_readiness(
+                    skills,
+                    career_name,
+                )
+
+                profile_context += (
+                    f"\nCareer: {career_name}\n"
+                    f"Career match score: {match_score}%\n"
+                )
+
+                if readiness:
+
+                    profile_context += (
+                        f"Readiness score: "
+                        f"{readiness['readiness_score']}%\n"
+                        f"Matched skills: "
+                        f"{', '.join(readiness['matched_skills']) or 'None'}\n"
+                        f"Missing skills: "
+                        f"{', '.join(readiness['missing_skills']) or 'None'}\n"
+                    )
+
+    # Include the most recent resume analysis when available
+    resume_analysis = st.session_state.get("resume_analysis")
+
+    if resume_analysis:
+        profile_context += (
+            "\nLATEST RESUME ANALYSIS:\n"
+            f"Career analyzed: "
+            f"{st.session_state.get('resume_analysis_career', 'Unknown')}\n"
+            f"Resume skill match: "
+            f"{resume_analysis.get('match_percentage', 0)}%\n"
+            f"Skills found: "
+            f"{', '.join(resume_analysis.get('matched_skills', [])) or 'None'}\n"
+            f"Resume skill gaps: "
+            f"{', '.join(resume_analysis.get('missing_skills', [])) or 'None'}\n"
+        )
+
+    # Combine the question with factual profile context
     question_with_context = (
-
-        f"STUDENT QUESTION:\n{prompt}\n\n"
-
-        f"STUDENT PROFILE CONTEXT:\n{context}\n\n"
-
+        f"STUDENT QUESTION:\n{prompt}\n"
+        f"{profile_context}\n\n"
         "CAREER GUIDANCE INSTRUCTIONS:\n"
-
-        "- Personalize the answer using the supplied profile when relevant.\n"
-
-        "- Use supplied scores and skill lists accurately.\n"
-
-        "- Prioritize missing skills and realistic next steps.\n"
-
-        "- Organize learning plans into weeks when useful.\n"
-
-        "- Use simple English, headings, and practical examples.\n"
-
-        "- Do not invent student details, scores, or learning resources.\n"
-
-        "- Never guarantee jobs, salaries, or placements.\n"
-
-        "- If no profile exists, provide general advice."
-
+        "- Personalize your answer using the supplied profile and "
+        "career recommendations when relevant.\n"
+        "- Use the provided scores and skill lists accurately.\n"
+        "- Explain the difference between career match and readiness "
+        "if the student asks about scores.\n"
+        "- Prioritize missing skills and give realistic next steps.\n"
+        "- For a learning plan, organize suggestions into weeks "
+        "with practical tasks.\n"
+        "- Use simple English and clear headings or bullet points.\n"
+        "- Do not invent student details, scores, skills, or resources.\n"
+        "- Do not guarantee jobs, salaries, internships, or placements.\n"
+        "- If no profile is available, explain that the advice is "
+        "general and suggest creating a profile."
     )
 
     with st.chat_message("assistant"):
 
         with st.spinner("CareerCompass AI is thinking..."):
 
-            try:
-
-                answer = get_career_response(
-
-                    question_with_context,
-
-                    conversation_history=st.session_state["chat_history"][:-1],
-
-                )
-
-                if not isinstance(answer, str) or not answer.strip():
-
-                    answer = "I couldn't generate a response. Please try again."
-
-            except Exception as error:
-
-                print(f"Chatbot error: {error}")
-
-                answer = "Sorry, the AI career mentor is temporarily unavailable. Please check your Groq API key and internet connection, then try again."
+            answer = get_career_response(
+                question_with_context,
+                conversation_history=(
+                    st.session_state["chat_history"][:-1]
+                ),
+            )
 
         st.markdown(answer)
 
-    st.session_state["chat_history"].append({"role": "assistant", "content": answer})
+    st.session_state["chat_history"].append(
+        {
+            "role": "assistant",
+            "content": answer,
+        }
+    )
+
+
 if st.button("🗑️ Clear Chat", key="clear_career_chat"):
 
     st.session_state["chat_history"] = []
-
     st.rerun()
+
+
 # --------------------------------------------------
-
 # 11. Footer
-
 # --------------------------------------------------
 
 st.divider()
 
 st.markdown(
-
-    '<div class="cc-footer">✦ CareerCompass AI · Personalized Career Recommendation Agent<br>Discover your direction. Develop your potential.</div>',
-
+    '<div class="footer">✦ CareerNova AI &nbsp;·&nbsp; '
+    'Personalized Career Recommendation Agent<br>'
+    'Discover your direction. Develop your potential.</div>',
     unsafe_allow_html=True,
-
 )
